@@ -2,7 +2,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::state::CollateralToken;
-use crate::state::CollateralTokenAmount;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -15,11 +14,11 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     // All functions related to locking / unlocking collateral tokens with the smart contract
 
-    LockCollateralTokens { collateral_tokens_to_lock: Vec<CollateralTokenAmount> },
-    LockCollateralToken { collateral_token_to_lock: CollateralTokenAmount },
+    LockCollateralTokens { collateral_tokens_to_lock: schemars::Map<CollateralToken, u128> },
+    LockCollateralToken { collateral_token_to_lock: CollateralToken, collateral_amount_to_lock: u128 },
 
-    UnlockCollateralTokens { collateral_tokens_to_unlock: Vec<CollateralTokenAmount> },
-    UnlockCollateralToken { collateral_token_to_unlock: CollateralTokenAmount },
+    UnlockCollateralTokens { collateral_tokens_to_unlock: schemars::Map<CollateralToken, u128> },
+    UnlockCollateralToken { collateral_token_to_unlock: CollateralToken, collateral_amount_to_unlock: u128 },
 
     // All functions related to minting / returning rupees
 
