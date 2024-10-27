@@ -74,18 +74,16 @@ pub fn execute(
 
         ExecuteMsg::UnlockCollateralToken {
             collateral_token_to_unlock,
+            collateral_amount_to_unlock,
         } => execute_unlock_collateral(
-            &deps,
-            info.sender.into_string(),
-            vec![collateral_token_to_unlock],
+            &mut deps,
+            info,
+            env,
+            schemars::Map::from([(collateral_token_to_unlock, collateral_amount_to_unlock)]),
         ),
         ExecuteMsg::UnlockCollateralTokens {
             collateral_tokens_to_unlock,
-        } => execute_unlock_collateral(
-            &deps,
-            info.sender.into_string(),
-            collateral_tokens_to_unlock,
-        ),
+        } => execute_unlock_collateral(&mut deps, info, env, collateral_tokens_to_unlock),
 
         ExecuteMsg::MintRupees { rupees_to_mint } => {
             execute_mint_rupees(&deps, info.sender.into_string(), rupees_to_mint)
@@ -216,14 +214,19 @@ fn execute_lock_collateral(
         }
     }
 
-    panic!("TODO: Implement this function!");
+    // Send the lock collateral messages and return the Ok response
+    Ok(Response::new()
+        .add_messages(lock_collateral_messages)
+        .add_attribute("action", "lock_collateral")
+        .add_attribute("sender", sender_address))
 }
 
 // Function to unlock a single collateral token
 fn execute_unlock_collateral(
-    deps: &DepsMut,
-    sender: String,
-    collateral_tokens: Vec<CollateralTokenAmount>,
+    deps: &mut DepsMut,
+    info: MessageInfo,
+    env: Env,
+    collateral_tokens: schemars::Map<CollateralToken, u128>,
 ) -> Result<Response, ContractError> {
     panic!("TODO: Implement this function!");
 }

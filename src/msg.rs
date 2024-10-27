@@ -49,5 +49,5 @@ pub enum QueryMsg {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct CollateralResponse {
-    pub collateral_locked: Vec<CollateralTokenAmount>,
+    pub collateral_locked: schemars::Map<CollateralToken, u128>,
 }
