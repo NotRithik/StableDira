@@ -5,8 +5,8 @@ use crate::state::CollateralToken;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    liquidation_health: f32,
-    allowed_collaterals: Vec<CollateralToken>,
+    pub liquidation_health: f32,
+    pub allowed_collaterals: Vec<CollateralToken>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

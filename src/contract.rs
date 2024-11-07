@@ -1,10 +1,8 @@
-use std::intrinsics::mir::PtrMetadata;
-
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Addr, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-    WasmMsg, WasmQuery,
+    to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
+    Response, StdResult, WasmMsg, WasmQuery,
 };
 
 use cw2::set_contract_version;
@@ -34,17 +32,15 @@ pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    _msg: InstantiateMsg,
-    liquidation_health: f32,
-    allowed_collaterals: Vec<CollateralToken>,
+    msg: InstantiateMsg,
+    // liquidation_health: f32,
+    // allowed_collaterals: Vec<CollateralToken>,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    let admin_address_string: String = String::from(info.sender.as_str());
-
-    ADMIN_ADDRESS.save(deps.storage, &admin_address_string);
-    LIQUIDATION_HEALTH.save(deps.storage, &liquidation_health);
-    ALLOWED_COLLATERALS.save(deps.storage, &allowed_collaterals);
+    ADMIN_ADDRESS.save(deps.storage, &info.sender)?;
+    LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health)?;
+    ALLOWED_COLLATERALS.save(deps.storage, &msg.allowed_collaterals)?;
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
@@ -63,39 +59,39 @@ pub fn execute(
             collateral_token_to_lock,
             collateral_amount_to_lock,
         } => execute_lock_collateral(
-            &mut deps,
+            deps,
             info,
             env,
             schemars::Map::from([(collateral_token_to_lock, collateral_amount_to_lock)]),
         ),
         ExecuteMsg::LockCollateralTokens {
             collateral_tokens_to_lock,
-        } => execute_lock_collateral(&mut deps, info, env, collateral_tokens_to_lock),
+        } => execute_lock_collateral(deps, info, env, collateral_tokens_to_lock),
 
         ExecuteMsg::UnlockCollateralToken {
             collateral_token_to_unlock,
             collateral_amount_to_unlock,
         } => execute_unlock_collateral(
-            &mut deps,
+            deps,
             info,
             env,
             schemars::Map::from([(collateral_token_to_unlock, collateral_amount_to_unlock)]),
         ),
         ExecuteMsg::UnlockCollateralTokens {
             collateral_tokens_to_unlock,
-        } => execute_unlock_collateral(&mut deps, info, env, collateral_tokens_to_unlock),
+        } => execute_unlock_collateral(deps, info, env, collateral_tokens_to_unlock),
 
         ExecuteMsg::MintRupees { rupees_to_mint } => {
-            execute_mint_rupees(&deps, info.sender.into_string(), rupees_to_mint)
+            execute_mint_rupees(deps, info.sender.into_string(), rupees_to_mint)
         }
         ExecuteMsg::ReturnRupees { rupees_to_return } => {
-            execute_return_rupees(&deps, info.sender.into_string(), rupees_to_return)
+            execute_return_rupees(deps, info.sender.into_string(), rupees_to_return)
         }
 
         ExecuteMsg::LiquidateStablecoins {
             liquidate_stablecoin_minter_address,
         } => execute_liquidate_stablecoin_minter(
-            &deps,
+            deps,
             info.sender.into_string(),
             liquidate_stablecoin_minter_address,
         ),
@@ -103,7 +99,7 @@ pub fn execute(
         ExecuteMsg::SetCollateralPricesInRupees {
             collateral_prices_in_rupees,
         } => execute_set_collateral_prices_in_rupees(
-            &deps,
+            deps,
             info.sender.into_string(),
             collateral_prices_in_rupees,
         ),
@@ -131,14 +127,11 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 // Function to lock a single collateral token
 fn execute_lock_collateral(
-    deps: &mut DepsMut,
+    deps: DepsMut,
     info: MessageInfo,
     env: Env,
     collateral_tokens: schemars::Map<CollateralToken, u128>,
 ) -> Result<Response, ContractError> {
-    // First, check if the address trying to lock collateral has enabled spending
-    // the amount of collateral they're trying to lock
-
     let mut lock_collateral_messages: Vec<CosmosMsg> = Vec::new();
     let sender_address = info.sender.to_string().clone();
 
@@ -159,7 +152,6 @@ fn execute_lock_collateral(
             CollateralToken::NativeToken => {
                 if funds_deposited < collateral_amount {
                     panic!("Not enough funds deposited");
-                    // return Err(ContractError::Std ::generic_err("Incorrect deposit amount sent."));
                 }
                 funds_deposited -= collateral_amount;
 
@@ -169,7 +161,9 @@ fn execute_lock_collateral(
                         let mut collaterals = previously_locked_collaterals.unwrap_or_default();
                         *collaterals.entry(collateral_token).or_insert(0) += collateral_amount;
                         Ok(collaterals)
-                });
+                })?;
+                // TODO: Implement error handling for different types of errors that could be returned instead of
+                // propagating the error up with stack with ?
             }
 
             CollateralToken::CW20Token(cw20_collateral_token_addr) => {
@@ -195,7 +189,9 @@ fn execute_lock_collateral(
                         *collaterals.entry(collateral_token).or_insert(0) += collateral_amount;
                         Ok(collaterals)
                      }
-                    );
+                    )?;
+                // TODO: Implement error handling for different types of errors that could be returned instead of
+                // propagating the error up with stack with ?
 
                 // // Add the transfer message to the response
                 // return Ok(Response::new()
@@ -209,7 +205,7 @@ fn execute_lock_collateral(
             }
 
             CollateralToken::CW721Token(cw721_collateral_token_addr) => {
-                panic!("UNIMPLEMENTED. Can't have NFTs as collateral just yet.");
+                panic!("UNIMPLEMENTED. Can't have NFTs or CW721 tokens as collateral just yet.");
             }
         }
     }
@@ -223,17 +219,101 @@ fn execute_lock_collateral(
 
 // Function to unlock a single collateral token
 fn execute_unlock_collateral(
-    deps: &mut DepsMut,
+    deps: DepsMut,
     info: MessageInfo,
     env: Env,
     collateral_tokens: schemars::Map<CollateralToken, u128>,
 ) -> Result<Response, ContractError> {
-    panic!("TODO: Implement this function!");
+    let mut unlock_collateral_messages: Vec<CosmosMsg> = Vec::new();
+    let sender_address = info.sender.to_string().clone();
+
+    for (collateral_token, collateral_amount) in collateral_tokens {
+        match collateral_token.clone() {
+            CollateralToken::NativeToken => {
+                LOCKED_COLLATERALS.update(deps.storage, Addr::unchecked(sender_address.clone()),
+            |previously_locked_collaterals|
+                    -> StdResult<schemars::Map<CollateralToken, u128>> {
+                        let mut collaterals = previously_locked_collaterals.unwrap_or_default();
+                        collaterals.entry(collateral_token).and_modify(|locked_amount| {
+                            if *locked_amount >= collateral_amount {
+                                *locked_amount -= collateral_amount;
+                            } else {
+                                //TODO: Error handling
+                                panic!("Not enough collateral locked!");
+                            }
+                        }).or_insert_with(|| {
+                            //TODO: Error handling
+                            panic!("Not enough collateral locked!");
+                        });
+                        Ok(collaterals)
+                })?;
+
+                // Create unlock collateral message
+                let send_msg = CosmosMsg::Bank(BankMsg::Send {
+                    to_address: sender_address.clone(),
+                    amount: vec![Coin {
+                        denom: NATIVE_TOKEN_DENOM
+                            .load(deps.storage)
+                            .unwrap_or(String::from("uatom")),
+                        amount: collateral_amount.into(),
+                    }],
+                });
+
+                // Push the message onto the unlock_collateral_messages vector
+                unlock_collateral_messages.push(send_msg);
+            }
+
+            CollateralToken::CW20Token(cw20_collateral_token_addr) => {
+                LOCKED_COLLATERALS.update(deps.storage, Addr::unchecked(sender_address.clone()),
+            |previously_locked_collaterals|
+                    -> StdResult<schemars::Map<CollateralToken, u128>> {
+                        let mut collaterals = previously_locked_collaterals.unwrap_or_default();
+                        collaterals.entry(collateral_token).and_modify(|locked_amount| {
+                            if *locked_amount >= collateral_amount {
+                                *locked_amount -= collateral_amount;
+                            } else {
+                                //TODO: Error handling
+                                panic!("Not enough collateral locked!");
+                            }
+                        }).or_insert_with(|| {
+                            //TODO: Error handling
+                            panic!("Not enough collateral locked!");
+                        });
+                        Ok(collaterals)
+                })?;
+
+                // Create unlock collateral message
+                let transfer_message = Cw20ExecuteMsg::Transfer {
+                    recipient: (sender_address.clone()),
+                    amount: (collateral_amount.into()),
+                };
+
+                let cw20collateral_transfer_message = CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: cw20_collateral_token_addr.to_string(),
+                    msg: to_json_binary(&transfer_message)?,
+                    funds: vec![],
+                });
+
+                // Push the message onto the unlock_collateral_messages vector
+                unlock_collateral_messages.push(cw20collateral_transfer_message);
+            }
+
+            CollateralToken::CW721Token(cw721_collateral_token_addr) => {
+                panic!("UNIMPLEMENTED. Can't unlock NFTs or CW721 tokens as collateral just yet.");
+            }
+        }
+    }
+
+    // panic!("TODO: Implement this function!");
+    Ok(Response::new()
+        .add_messages(unlock_collateral_messages)
+        .add_attribute("action", "lock_collateral")
+        .add_attribute("sender", sender_address))
 }
 
 // Function to mint rupees
 fn execute_mint_rupees(
-    deps: &DepsMut,
+    deps: DepsMut,
     sender: String,
     rupees_to_mint: u128,
 ) -> Result<Response, ContractError> {
@@ -242,7 +322,7 @@ fn execute_mint_rupees(
 
 // Function to return rupees
 fn execute_return_rupees(
-    deps: &DepsMut,
+    deps: DepsMut,
     sender: String,
     rupees_to_return: u128,
 ) -> Result<Response, ContractError> {
@@ -251,7 +331,7 @@ fn execute_return_rupees(
 
 // Function to liquidate stablecoins
 fn execute_liquidate_stablecoin_minter(
-    deps: &DepsMut,
+    deps: DepsMut,
     sender: String,
     liquidate_stablecoin_minter_address: String,
 ) -> Result<Response, ContractError> {
@@ -260,7 +340,7 @@ fn execute_liquidate_stablecoin_minter(
 
 // Function to set collateral prices in rupees
 fn execute_set_collateral_prices_in_rupees(
-    deps: &DepsMut,
+    deps: DepsMut,
     sender: String,
     collateral_prices_in_rupees: schemars::Map<CollateralToken, u128>,
 ) -> Result<Response, ContractError> {
