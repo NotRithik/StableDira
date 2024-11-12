@@ -1,10 +1,10 @@
 use std::borrow::BorrowMut;
 
-use cosmwasm_std::{coins, Addr, Response, ContractResult};
+use cosmwasm_std::{coins, ContractResult, Decimal, Response};
 use cosmwasm_vm::{
-    to_vec, call_instantiate, testing::{mock_env, mock_info, mock_instance_with_gas_limit, MockApi, MockStorage, instantiate}, Instance
+    to_vec, call_instantiate, testing::{mock_env, mock_info, mock_instance_with_gas_limit}
 };
-use stable_rupee::{ msg::InstantiateMsg, state::CollateralToken, ContractError}; // Replace with your contract module
+use stable_rupee::{ msg::InstantiateMsg, state::CollateralToken}; // Replace with your contract module
 
 const WASM: &[u8] = include_bytes!("../artifacts/stable_rupee.wasm"); // Path to compiled Wasm
 
@@ -14,7 +14,7 @@ fn test_instantiate_contract() {
     let mut instance = mock_instance_with_gas_limit(WASM, 5_000_000_000_000_000);
 
     let msg = InstantiateMsg {
-        liquidation_health: 1.5,
+        liquidation_health: Decimal::from_ratio(3u32, 2u32),
         allowed_collaterals: vec![CollateralToken::NativeToken],
     };
 

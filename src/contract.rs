@@ -42,8 +42,10 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     ADMIN_ADDRESS.save(deps.storage, &info.sender)?;
-    LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health)?;
-    ALLOWED_COLLATERALS.save(deps.storage, &msg.allowed_collaterals)?;
+    // LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health)?;
+    // ALLOWED_COLLATERALS.save(deps.storage, &msg.allowed_collaterals)?;
+    LIQUIDATION_HEALTH.save(deps.storage, &1.5f32);
+    ALLOWED_COLLATERALS.save(deps.storage, &vec![CollateralToken::NativeToken]);
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")

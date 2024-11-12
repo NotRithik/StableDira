@@ -47,6 +47,7 @@ cw-storage-plus = "1.2.0"
 cw2 = "1.1.2"
 cw20 = "1.1.2"
 cw721 = "0.18.0"
+getrandom = { version = "0.2.15", features = ["js"] }
 # cosmwasm-std = "2.1.4"
 # cosmwasm-storage = "1.5.2"
 # cw-storage-plus = "2.0.0"
@@ -58,4 +59,4 @@ serde = { version = "1.0", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0" }
 
 [dev-dependencies]
-cosmwasm-schema = { version = "2.1.4" }
+# cosmwasm-schema = { version = "2.1.4" }
