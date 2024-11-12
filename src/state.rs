@@ -7,8 +7,8 @@ use cosmwasm_std::Addr;
 #[serde(rename_all = "snake_case")]
 pub enum CollateralToken {
     NativeToken,
-    CW20Token(Addr),
-    CW721Token(Addr),
+    CW20Token(String),
+    CW721Token(String),
 }
 
 // #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

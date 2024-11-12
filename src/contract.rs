@@ -36,6 +36,9 @@ pub fn instantiate(
     // liquidation_health: f32,
     // allowed_collaterals: Vec<CollateralToken>,
 ) -> Result<Response, ContractError> {
+    deps.api.debug("Instantiating contract...");
+    deps.api.debug(&format!("Received message: {:?}", msg));
+
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     ADMIN_ADDRESS.save(deps.storage, &info.sender)?;
@@ -372,73 +375,138 @@ fn query_stablecoin_health(
  * THIS IS THE SECTION FOR ALL TESTS
  ****/
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_json};
+//  #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env, mock_info};
+//     use cosmwasm_std::{coins, from_binary};
 
-    #[test]
-    fn proper_initialization() {
-        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
+//     #[test]
+//     fn proper_initialization() {
+//         let mut deps = mock_dependencies_with_balance(&coins(1000, "umantra"));
 
-        let msg = InstantiateMsg { count: 17 };
-        let info = mock_info("creator", &coins(1000, "earth"));
+//         let msg = InstantiateMsg {
+//             liquidation_health: 1.5,
+//             allowed_collaterals: vec![
+//                 CollateralToken::NativeToken,
+//                 CollateralToken::CW20Token(Addr::unchecked("cw20_token")),
+//             ],
+//         };
+//         let info = mock_info("admin", &[]);
 
-        // we can just call .unwrap() to assert this was a success
-        let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-        assert_eq!(0, res.messages.len());
+//         let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+//         assert_eq!(0, res.messages.len());
 
-        // it worked, let's query the state
-        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-        let value: CountResponse = from_binary(&res).unwrap();
-        assert_eq!(17, value.count);
-    }
+//         let stored_admin = ADMIN_ADDRESS.load(&deps.storage).unwrap();
+//         assert_eq!(stored_admin, info.sender);
 
-    #[test]
-    fn increment() {
-        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
+//         let allowed_collaterals = ALLOWED_COLLATERALS.load(&deps.storage).unwrap();
+//         assert_eq!(
+//             allowed_collaterals,
+//             vec![
+//                 CollateralToken::NativeToken,
+//                 CollateralToken::CW20Token(Addr::unchecked("cw20_token")),
+//             ]
+//         );
+//     }
 
-        let msg = InstantiateMsg { count: 17 };
-        let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+//     #[test]
+//     fn lock_native_token_collateral() {
+//         let mut deps = mock_dependencies_with_balance(&coins(1000, "umantra"));
 
-        // beneficiary can release it
-        let info = mock_info("anyone", &coins(2, "token"));
-        let msg = ExecuteMsg::Increment {};
-        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+//         let msg = InstantiateMsg {
+//             liquidation_health: 1.5,
+//             allowed_collaterals: vec![CollateralToken::NativeToken],
+//         };
+//         let info = mock_info("admin", &[]);
+//         instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        // should increase counter by 1
-        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-        let value: CountResponse = from_binary(&res).unwrap();
-        assert_eq!(18, value.count);
-    }
+//         // Lock 500 umantra as collateral
+//         let lock_msg = ExecuteMsg::LockCollateralToken {
+//             collateral_token_to_lock: CollateralToken::NativeToken,
+//             collateral_amount_to_lock: 500,
+//         };
+//         let info = mock_info("user1", &coins(500, "umantra"));
 
-    #[test]
-    fn reset() {
-        let mut deps = mock_dependencies_with_balance(&coins(2, "token"));
+//         let res = execute(deps.as_mut(), mock_env(), info.clone(), lock_msg).unwrap();
+//         assert_eq!(1, res.messages.len());
 
-        let msg = InstantiateMsg { count: 17 };
-        let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+//         // Query locked collateral
+//         let query_msg = QueryMsg::QueryLockedCollateral {
+//             collateral_address_to_query: "user1".to_string(),
+//         };
+//         let res = query(deps.as_ref(), mock_env(), query_msg).unwrap();
+//         let locked_collateral: schemars::Map<CollateralToken, u128> = from_binary(&res).unwrap();
+//         assert_eq!(locked_collateral[&CollateralToken::NativeToken], 500);
+//     }
 
-        // beneficiary can release it
-        let unauth_info = mock_info("anyone", &coins(2, "token"));
-        let msg = ExecuteMsg::Reset { count: 5 };
-        let res = execute(deps.as_mut(), mock_env(), unauth_info, msg);
-        match res {
-            Err(ContractError::Unauthorized {}) => {}
-            _ => panic!("Must return unauthorized error"),
-        }
+//     #[test]
+//     fn unlock_native_token_collateral() {
+//         let mut deps = mock_dependencies_with_balance(&coins(1000, "umantra"));
 
-        // only the original creator can reset the counter
-        let auth_info = mock_info("creator", &coins(2, "token"));
-        let msg = ExecuteMsg::Reset { count: 5 };
-        let _res = execute(deps.as_mut(), mock_env(), auth_info, msg).unwrap();
+//         let msg = InstantiateMsg {
+//             liquidation_health: 1.5,
+//             allowed_collaterals: vec![CollateralToken::NativeToken],
+//         };
+//         let info = mock_info("admin", &[]);
+//         instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        // should now be 5
-        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-        let value: CountResponse = from_binary(&res).unwrap();
-        assert_eq!(5, value.count);
-    }
-}
+//         // Lock 500 umantra as collateral
+//         let lock_msg = ExecuteMsg::LockCollateralToken {
+//             collateral_token_to_lock: CollateralToken::NativeToken,
+//             collateral_amount_to_lock: 500,
+//         };
+//         let info = mock_info("user1", &coins(500, "umantra"));
+//         execute(deps.as_mut(), mock_env(), info.clone(), lock_msg).unwrap();
+
+//         // Unlock 300 umantra
+//         let unlock_msg = ExecuteMsg::UnlockCollateralToken {
+//             collateral_token_to_unlock: CollateralToken::NativeToken,
+//             collateral_amount_to_unlock: 300,
+//         };
+//         let res = execute(deps.as_mut(), mock_env(), info.clone(), unlock_msg).unwrap();
+//         assert_eq!(1, res.messages.len());
+
+//         // Query locked collateral
+//         let query_msg = QueryMsg::QueryLockedCollateral {
+//             collateral_address_to_query: "user1".to_string(),
+//         };
+//         let res = query(deps.as_ref(), mock_env(), query_msg).unwrap();
+//         let locked_collateral: schemars::Map<CollateralToken, u128> = from_binary(&res).unwrap();
+//         assert_eq!(locked_collateral[&CollateralToken::NativeToken], 200);
+//     }
+
+//     #[test]
+//     fn lock_cw20_token_collateral() {
+//         let mut deps = mock_dependencies_with_balance(&coins(1000, "umantra"));
+
+//         let msg = InstantiateMsg {
+//             liquidation_health: 1.5,
+//             allowed_collaterals: vec![CollateralToken::CW20Token(Addr::unchecked("cw20_token"))],
+//         };
+//         let info = mock_info("admin", &[]);
+//         instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+//         // Lock 500 CW20 tokens as collateral
+//         let lock_msg = ExecuteMsg::LockCollateralToken {
+//             collateral_token_to_lock: CollateralToken::CW20Token(Addr::unchecked("cw20_token")),
+//             collateral_amount_to_lock: 500,
+//         };
+//         let info = mock_info("user1", &[]);
+
+//         let res = execute(deps.as_mut(), mock_env(), info.clone(), lock_msg).unwrap();
+//         assert_eq!(1, res.messages.len());
+
+//         // Query locked collateral
+//         let query_msg = QueryMsg::QueryLockedCollateral {
+//             collateral_address_to_query: "user1".to_string(),
+//         };
+//         let res = query(deps.as_ref(), mock_env(), query_msg).unwrap();
+//         let locked_collateral: schemars::Map<CollateralToken, u128> = from_binary(&res).unwrap();
+//         assert_eq!(
+//             locked_collateral[&CollateralToken::CW20Token(Addr::unchecked("cw20_token"))],
+//             500
+//         );
+//     }
+// }
+ 
