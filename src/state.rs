@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr};
+use cosmwasm_std::{Addr, Decimal};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -25,7 +25,7 @@ pub const ADMIN_ADDRESS: cw_storage_plus::Item<Addr> =
     cw_storage_plus::Item::new("admin-address");
 
 
-pub const LIQUIDATION_HEALTH: cw_storage_plus::Item<f32> =
+pub const LIQUIDATION_HEALTH: cw_storage_plus::Item<Decimal> =
     // Admin changeable, below what health of the collateral for the stablecoin can
     // a user's collateral be liquidated?
     cw_storage_plus::Item::new("liquidation-health");

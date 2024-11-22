@@ -42,12 +42,10 @@ optimize = """docker run --rm -v "$(pwd)":/code \\
 [dependencies]
 cosmwasm-std = "1.5.8"
 cosmwasm-storage = "1.5.2"
-cosmwasm-vm = "1.5.8"
 cw-storage-plus = "1.2.0"
 cw2 = "1.1.2"
 cw20 = "1.1.2"
 cw721 = "0.18.0"
-getrandom = { version = "0.2.15", features = ["js"] }
 # cosmwasm-std = "2.1.4"
 # cosmwasm-storage = "1.5.2"
 # cw-storage-plus = "2.0.0"
@@ -56,7 +54,15 @@ getrandom = { version = "0.2.15", features = ["js"] }
 # cw721 = "0.18.0"
 schemars = "0.8"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
+serde-json-wasm = "0.5.2"
+serde_json = "1.0.132"
 thiserror = { version = "1.0" }
+cosmwasm-schema = { version = "1.5.2" }
+# wasmer-vm = "5.0.1"
 
 [dev-dependencies]
-# cosmwasm-schema = { version = "2.1.4" }
+
+# STUFF BELOW IS REQUIRED ONLY FOR TEST BUILDS
+
+cosmwasm-vm = "1.5.8"
+getrandom = { version = "0.2.15", features = ["js"] }

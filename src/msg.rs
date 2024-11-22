@@ -1,13 +1,18 @@
-use cosmwasm_std::Decimal;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::state::CollateralToken;
 
+use cosmwasm_schema::{cw_serde, QueryResponses};
+
+use cosmwasm_std::Decimal;
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+// #[cw_serde]
 pub struct InstantiateMsg {
-    // pub liquidation_health: Decimal,
-    // pub allowed_collaterals: Vec<CollateralToken>,
+    pub liquidation_health: Decimal,
+    pub allowed_collaterals: Vec<CollateralToken>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

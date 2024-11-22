@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult, WasmMsg, WasmQuery,
+    Response, StdResult, WasmMsg, WasmQuery, Decimal,
 };
 
 use cw2::set_contract_version;
@@ -42,10 +42,10 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     ADMIN_ADDRESS.save(deps.storage, &info.sender)?;
-    // LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health)?;
-    // ALLOWED_COLLATERALS.save(deps.storage, &msg.allowed_collaterals)?;
-    LIQUIDATION_HEALTH.save(deps.storage, &1.5f32);
-    ALLOWED_COLLATERALS.save(deps.storage, &vec![CollateralToken::NativeToken]);
+    LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health)?;
+    ALLOWED_COLLATERALS.save(deps.storage, &msg.allowed_collaterals)?;
+    // dbg!(&LIQUIDATION_HEALTH.save(deps.storage, &Decimal::from_ratio(1u128, 2u128)));
+    // dbg!(&ALLOWED_COLLATERALS.save(deps.storage, &vec![CollateralToken::NativeToken]));
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
