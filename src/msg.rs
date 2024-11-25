@@ -13,6 +13,7 @@ use cosmwasm_std::Decimal;
 pub struct InstantiateMsg {
     pub liquidation_health: Decimal,
     pub allowed_collaterals: Vec<CollateralToken>,
+    pub native_token_denom: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
