@@ -1,5 +1,5 @@
 [package]
-name = "stable-rupee"
+name = "stable-dira"
 version = "0.1.0"
 authors = ["Rithik Kumar S <rithikum123@gmail.com>"]
 edition = "2018"
