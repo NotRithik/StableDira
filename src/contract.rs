@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Response, StdResult, WasmMsg, WasmQuery,
+    MessageInfo, Response, StdResult, Uint128, WasmMsg, WasmQuery,
 };
 
 use cw2::set_contract_version;
@@ -10,7 +10,8 @@ use cw2::set_contract_version;
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{
-    ADMIN_ADDRESS, COLLATERAL_TOKEN_PRICE, LIQUIDATION_HEALTH, MINTED_DIRA, NATIVE_TOKEN_DENOM,
+    ADMIN_ADDRESS, COLLATERAL_TOKEN_DENOM, COLLATERAL_TOKEN_PRICE, LIQUIDATION_HEALTH,
+    LOCKED_COLLATERAL, MINTED_DIRA,
 };
 
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg};
@@ -42,7 +43,7 @@ pub fn instantiate(
 
     ADMIN_ADDRESS.save(deps.storage, &info.sender);
     LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health);
-    NATIVE_TOKEN_DENOM.save(deps.storage, &msg.native_token_denom);
+    COLLATERAL_TOKEN_DENOM.save(deps.storage, &msg.collateral_token_denom);
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
@@ -62,21 +63,11 @@ pub fn execute(
     match msg {
         ExecuteMsg::LockCollateral {
             collateral_amount_to_lock,
-        } => execute_lock_collateral(
-            deps,
-            info,
-            env,
-            collateral_amount_to_lock,
-        ),
+        } => execute_lock_collateral(deps, info, env, collateral_amount_to_lock),
 
         ExecuteMsg::UnlockCollateral {
             collateral_amount_to_unlock,
-        } => execute_unlock_collateral(
-            deps,
-            info,
-            env,
-            collateral_amount_to_unlock,
-        ),
+        } => execute_unlock_collateral(deps, info, env, collateral_amount_to_unlock),
 
         ExecuteMsg::MintDira { dira_to_mint } => {
             execute_mint_dira(deps, info.sender.into_string(), dira_to_mint)
@@ -122,34 +113,98 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
  * THIS IS THE SECTION FOR ACTUAL IMPLEMENTATIONS OF ALL THE FUNCTIONS USED ABOVE!
  ****/
 
-// Function to lock a single collateral token
+// Function to lock collateral
 fn execute_lock_collateral(
     deps: DepsMut,
     info: MessageInfo,
     env: Env,
     collateral_amount: Decimal,
 ) -> Result<Response, ContractError> {
+    let collateral_token_denom = COLLATERAL_TOKEN_DENOM
+        .load(deps.storage)
+        .unwrap_or(String::from("uatom"));
+    let message_sender = info.sender;
+
+    // Check if the user has sent enough funds along with the transaction
+    let sent_funds = info
+        .funds
+        .iter()
+        .find(|coin| coin.denom == collateral_token_denom)
+        .ok_or(ContractError::InsufficientFundsSent {})
+        .unwrap();
+
+    let sent_amount = Decimal::from_ratio(sent_funds.amount, Uint128::new(1));
+
+    if sent_amount < collateral_amount {
+        return Err(ContractError::InsufficientFundsSent {});
+    }
+
+    LOCKED_COLLATERAL.update(
+        deps.storage,
+        message_sender.clone(),
+        |balance: Option<Decimal>| -> Result<_, ContractError> {
+            Ok(balance.unwrap_or_default() + collateral_amount)
+        },
+    )?;
 
     // Send the lock collateral messages and return the Ok response
     Ok(Response::new()
-        .add_messages(lock_collateral_messages)
         .add_attribute("action", "lock_collateral")
-        .add_attribute("sender", sender_address))
+        .add_attribute("sender", message_sender.clone())
+        .add_attribute(
+            "total_funds_locked_by_user",
+            LOCKED_COLLATERAL
+                .load(deps.storage, message_sender)
+                .unwrap_or_default()
+                .to_string(),
+        ))
 }
 
-// Function to unlock a single collateral token
+// Function to unlock collateral
 fn execute_unlock_collateral(
     deps: DepsMut,
     info: MessageInfo,
     env: Env,
     collateral_amount: Decimal,
 ) -> Result<Response, ContractError> {
+    let collateral_token_denom = COLLATERAL_TOKEN_DENOM.load(deps.storage).unwrap_or(String::from("uatom"));
+    let message_sender = info.sender;
 
-    // panic!("TODO: Implement this function!");
+    LOCKED_COLLATERAL.update(
+        deps.storage,
+        message_sender.clone(),
+        |balance: Option<Decimal>| -> Result<_, ContractError> {
+            match balance {
+                Some(bal) => {
+                    if bal < collateral_amount {
+                        return Err(ContractError::InsufficientCollateral {});
+                    }
+                    Ok(bal - collateral_amount)
+                }
+                None => Err(ContractError::InsufficientCollateral {}),
+            }
+        },
+    )?;
+
+    let unlock_collateral_message = BankMsg::Send {
+        to_address: message_sender.to_string(),
+        amount: vec![Coin {
+            denom: collateral_token_denom,
+            amount: collateral_amount * Uint128::new(1), // Assuming decimal representation
+        }],
+    };
+
     Ok(Response::new()
-        .add_messages(unlock_collateral_messages)
-        .add_attribute("action", "lock_collateral")
-        .add_attribute("sender", sender_address))
+        .add_message(CosmosMsg::Bank(unlock_collateral_message))
+        .add_attribute("action", "unlock_collateral")
+        .add_attribute("sender", message_sender.clone())
+        .add_attribute(
+            "total_funds_locked_by_user",
+            LOCKED_COLLATERAL
+                .load(deps.storage, message_sender)
+                .unwrap_or_default()
+                .to_string(),
+        ))
 }
 
 // Function to mint rupees
@@ -189,9 +244,7 @@ fn execute_set_collateral_prices_in_dirham(
 }
 
 // Query function to get collateral prices
-fn query_collateral_price(
-    deps: &Deps,
-) -> StdResult<Binary> {
+fn query_collateral_price(deps: &Deps) -> StdResult<Binary> {
     panic!("TODO: Implement this function!");
 }
 

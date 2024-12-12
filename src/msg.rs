@@ -10,7 +10,7 @@ use cosmwasm_std::{Addr, Decimal};
 // #[cw_serde]
 pub struct InstantiateMsg {
     pub liquidation_health: Decimal,
-    pub native_token_denom: String,
+    pub collateral_token_denom: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Addr, Decimal};
 
-pub const NATIVE_TOKEN_DENOM: cw_storage_plus::Item<String> =
+pub const COLLATERAL_TOKEN_DENOM: cw_storage_plus::Item<String> =
     cw_storage_plus::Item::new("native-token-name");
 
 pub const ADMIN_ADDRESS: cw_storage_plus::Item<Addr> =
