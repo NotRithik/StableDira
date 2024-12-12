@@ -1,18 +1,15 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::state::CollateralToken;
-
 use cosmwasm_schema::{cw_serde, QueryResponses};
 
-use cosmwasm_std::Decimal;
+use cosmwasm_std::{Addr, Decimal};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 // #[cw_serde]
 pub struct InstantiateMsg {
     pub liquidation_health: Decimal,
-    pub allowed_collaterals: Vec<CollateralToken>,
     pub native_token_denom: String,
 }
 
@@ -21,16 +18,14 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     // All functions related to locking / unlocking collateral tokens with the smart contract
 
-    LockCollateralTokens { collateral_tokens_to_lock: schemars::Map<CollateralToken, u128> },
-    LockCollateralToken { collateral_token_to_lock: CollateralToken, collateral_amount_to_lock: u128 },
+    LockCollateral { collateral_amount_to_lock: Decimal },
 
-    UnlockCollateralTokens { collateral_tokens_to_unlock: schemars::Map<CollateralToken, u128> },
-    UnlockCollateralToken { collateral_token_to_unlock: CollateralToken, collateral_amount_to_unlock: u128 },
+    UnlockCollateral { collateral_amount_to_unlock: Decimal },
 
     // All functions related to minting / returning rupees
 
-    MintRupees { rupees_to_mint: u128 },
-    ReturnRupees { rupees_to_return: u128 },
+    MintDira { dira_to_mint: Decimal },
+    RedeemDira { dira_to_redeem: Decimal },
 
     // Liquidate someone's stablecoins if their stablecoin health goes below a certain health
 
@@ -38,23 +33,23 @@ pub enum ExecuteMsg {
 
     // Function to set collateral prices from oracles
 
-    SetCollateralPricesInRupees { collateral_prices_in_rupees: schemars::Map<CollateralToken, u128> },
+    SetCollateralPricesInDirham { collateral_price_in_aed: Decimal },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
 
-    QueryLockedCollateral { collateral_address_to_query: String },
+    QueryLockedCollateral { wallet_address_to_query: Addr },
 
-    QueryStablecoinHealth { stablecoin_minter_address_to_query: String },
+    QueryStablecoinHealth { stablecoin_minter_address_to_query: Addr },
 
-    QueryCollateralPrices { collateral_tokens: Option<Vec<CollateralToken>> },
+    QueryCollateralPrice,
 
 }
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct CollateralResponse {
-    pub collateral_locked: schemars::Map<CollateralToken, u128>,
+    pub collateral_locked: Decimal,
 }

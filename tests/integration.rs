@@ -81,7 +81,7 @@ fn test_lock_unlock_collateral() {
     dbg!(&res);
     assert!(res.is_ok());
 
-    let unlock_msg_to_execute = ExecuteMsg::UnlockCollateralToken {
+    let unlock_msg_to_execute = ExecuteMsg::UnlockCollateral {
         collateral_token_to_unlock: CollateralToken::NativeToken,
         collateral_amount_to_unlock: 102u128,
     };
