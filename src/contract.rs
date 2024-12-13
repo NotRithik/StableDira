@@ -3,8 +3,8 @@ use core::panic;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Response, StdResult, Uint128
+    Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+    Uint128,
 };
 
 use cw2::set_contract_version;
@@ -83,34 +83,24 @@ pub fn execute(
             collateral_amount_to_unlock,
         } => execute_unlock_collateral(deps, info, collateral_amount_to_unlock),
 
-        ExecuteMsg::MintDira { dira_to_mint } => {
-            execute_mint_dira(deps, info.sender.into_string(), dira_to_mint)
-        }
+        ExecuteMsg::MintDira { dira_to_mint } => execute_mint_dira(deps, info, dira_to_mint),
         ExecuteMsg::RedeemDira { dira_to_redeem } => {
-            execute_return_dira(deps, info.sender.into_string(), dira_to_redeem)
+            execute_return_dira(deps, info, dira_to_redeem)
         }
 
         ExecuteMsg::LiquidateStablecoins {
             liquidate_stablecoin_minter_address,
-        } => execute_liquidate_stablecoin_minter(
-            deps,
-            info.sender.into_string(),
-            liquidate_stablecoin_minter_address,
-        ),
+        } => execute_liquidate_stablecoin_minter(deps, info, liquidate_stablecoin_minter_address),
 
         ExecuteMsg::SetCollateralPriceInDirham {
             collateral_price_in_aed,
-        } => execute_set_collateral_price_in_dirham(
-            deps,
-            info.sender.into_string(),
-            collateral_price_in_aed,
-        ),
+        } => execute_set_collateral_price_in_dirham(deps, info, collateral_price_in_aed),
 
         ExecuteMsg::SetLiquidationHealth { liquidation_health } => {
-            execute_set_liquidation_health(deps, info.sender.into_string(), liquidation_health)
+            execute_set_liquidation_health(deps, info, liquidation_health)
         }
         ExecuteMsg::SetMintableHealth { mintable_health } => {
-            execute_set_mintable_health(deps, info.sender.into_string(), mintable_health)
+            execute_set_mintable_health(deps, info, mintable_health)
         }
     }
 }
@@ -304,7 +294,7 @@ fn execute_unlock_collateral(
         to_address: message_sender.to_string(),
         amount: vec![Coin {
             denom: collateral_token_denom,
-            amount: collateral_amount * Uint128::new(1), // Assuming decimal representation
+            amount: collateral_amount.atomics(), // Assuming decimal representation
         }],
     };
 
@@ -314,7 +304,7 @@ fn execute_unlock_collateral(
 // Function to mint rupees
 fn execute_mint_dira(
     deps: DepsMut,
-    sender: String,
+    info: MessageInfo,
     dira_to_mint: Decimal,
 ) -> Result<Response, ContractError> {
     panic!("TODO: Implement this function!");
@@ -323,7 +313,7 @@ fn execute_mint_dira(
 // Function to return rupees
 fn execute_return_dira(
     deps: DepsMut,
-    sender: String,
+    info: MessageInfo,
     dira_to_return: Decimal,
 ) -> Result<Response, ContractError> {
     panic!("TODO: Implement this function!");
@@ -332,7 +322,7 @@ fn execute_return_dira(
 // Function to liquidate stablecoins
 fn execute_liquidate_stablecoin_minter(
     deps: DepsMut,
-    sender: String,
+    info: MessageInfo,
     liquidate_stablecoin_minter_address: String,
 ) -> Result<Response, ContractError> {
     panic!("TODO: Implement this function!");
@@ -341,13 +331,12 @@ fn execute_liquidate_stablecoin_minter(
 // Function to set collateral prices in rupees
 fn execute_set_collateral_price_in_dirham(
     deps: DepsMut,
-    sender: String,
+    info: MessageInfo,
     collateral_price_in_aed: Decimal,
 ) -> Result<Response, ContractError> {
     let admins = ADMIN_ADDRESSES.load(deps.storage)?;
-    let sender_address = deps.api.addr_validate(&sender)?;
 
-    if !admins.contains(&sender_address) {
+    if !admins.contains(&info.sender) {
         return Err(ContractError::UnauthorizedUser {});
     }
 
@@ -361,20 +350,19 @@ fn execute_set_collateral_price_in_dirham(
 
     Ok(Response::new()
         .add_attribute("action", "set_collateral_price_in_dirham")
-        .add_attribute("sender", sender)
+        .add_attribute("sender", info.sender)
         .add_attribute("new_collateral_price", collateral_price_in_aed.to_string()))
 }
 
 // Function to set liquidation health
 fn execute_set_liquidation_health(
     deps: DepsMut,
-    sender: String,
+    info: MessageInfo,
     liquidation_health: Decimal,
 ) -> Result<Response, ContractError> {
     let admins = ADMIN_ADDRESSES.load(deps.storage)?;
-    let sender_address = deps.api.addr_validate(&sender)?;
 
-    if !admins.contains(&sender_address) {
+    if !admins.contains(&info.sender) {
         return Err(ContractError::UnauthorizedUser {});
     }
 
@@ -385,20 +373,19 @@ fn execute_set_liquidation_health(
 
     Ok(Response::new()
         .add_attribute("action", "set_liquidation_health")
-        .add_attribute("sender", sender)
+        .add_attribute("sender", info.sender)
         .add_attribute("new_liquidation_health", liquidation_health.to_string()))
 }
 
 // Function to set mintable health
 fn execute_set_mintable_health(
     deps: DepsMut,
-    sender: String,
+    info: MessageInfo,
     mintable_health: Decimal,
 ) -> Result<Response, ContractError> {
     let admins = ADMIN_ADDRESSES.load(deps.storage)?;
-    let sender_address = deps.api.addr_validate(&sender)?;
 
-    if !admins.contains(&sender_address) {
+    if !admins.contains(&info.sender) {
         return Err(ContractError::UnauthorizedUser {});
     }
 
@@ -417,7 +404,7 @@ fn execute_set_mintable_health(
 
     Ok(Response::new()
         .add_attribute("action", "set_mintable_health")
-        .add_attribute("sender", sender)
+        .add_attribute("sender", info.sender)
         .add_attribute("new_liquidation_health", mintable_health.to_string()))
 }
 

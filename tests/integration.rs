@@ -67,6 +67,7 @@ fn test_admin_functions() {
         &admin_info,
         &to_vec(&set_collateral_price_msg).unwrap(),
     ).unwrap();
+
     assert!(res.is_ok());
 
     let res: ContractResult<Response> = call_execute(
@@ -135,6 +136,8 @@ fn test_lock_unlock_collateral() {
         &mock_info("creator", &[]),
         &to_vec(&set_collateral_price_msg).unwrap(),
     ).unwrap();
+
+    assert!(res.is_ok());
 
     let msg_to_execute = ExecuteMsg::LockCollateral {
         collateral_amount_to_lock: Decimal::from_ratio(103u128, 1u128),
