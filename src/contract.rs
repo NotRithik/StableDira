@@ -45,6 +45,14 @@ pub fn instantiate(
         return Err(ContractError::HealthCannotBeZero {});
     }
 
+    if msg.collateral_token_denom.is_empty() {
+        return Err(ContractError::MissingCollateralTokenDenom {});
+    }
+
+    if msg.mintable_health < msg.liquidation_health {
+        return Err(ContractError::MintableHealthLowerThanLiquidationHealth {});
+    }
+
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     ADMIN_ADDRESSES.save(deps.storage, &vec![info.sender.clone()])?;
@@ -98,6 +106,13 @@ pub fn execute(
             info.sender.into_string(),
             collateral_price_in_aed,
         ),
+
+        ExecuteMsg::SetLiquidationHealth { liquidation_health } => {
+            execute_set_liquidation_health(deps, info.sender.into_string(), liquidation_health)
+        }
+        ExecuteMsg::SetMintableHealth { mintable_health } => {
+            execute_set_mintable_health(deps, info.sender.into_string(), mintable_health)
+        }
     }
 }
 
@@ -162,9 +177,10 @@ fn calculate_max_unlockable_collateral(
     locked_collateral: Decimal,
     collateral_price_in_aed: Decimal,
     minted_dira: Decimal,
-    mintable_health: Decimal
+    mintable_health: Decimal,
 ) -> Decimal {
-    let required_collateral_for_minted_dira = (minted_dira * mintable_health) / collateral_price_in_aed;
+    let required_collateral_for_minted_dira =
+        (minted_dira * mintable_health) / collateral_price_in_aed;
     let unlockable_collateral = locked_collateral - required_collateral_for_minted_dira;
 
     unlockable_collateral
@@ -179,7 +195,8 @@ fn execute_lock_collateral(
 ) -> Result<Response, ContractError> {
     let collateral_token_denom = COLLATERAL_TOKEN_DENOM
         .load(deps.storage)
-        .unwrap_or(String::from("uatom"));
+        .map_err(|_| ContractError::MissingCollateralTokenDenom {})?;
+
     let message_sender = info.sender;
 
     // Check if the user has sent enough funds along with the transaction
@@ -227,16 +244,41 @@ fn execute_lock_collateral(
 fn execute_unlock_collateral(
     deps: DepsMut,
     info: MessageInfo,
-    // env: Env,
     collateral_amount: Decimal,
 ) -> Result<Response, ContractError> {
-    panic!("READ TODO IN UNLOCK COLLATERAL");
-    // TODO: make it so that you check what the max unlockable collateral is and only allow
-    // the user to unlock less than or equal to that amount
     let collateral_token_denom = COLLATERAL_TOKEN_DENOM
         .load(deps.storage)
-        .unwrap_or(String::from("uatom"));
+        .map_err(|_| ContractError::MissingCollateralTokenDenom {})?;
+
     let message_sender = info.sender;
+
+    let locked_collateral = LOCKED_COLLATERAL
+        .load(deps.storage, message_sender.clone())
+        .unwrap_or_default();
+
+    let minted_dira = MINTED_DIRA
+        .load(deps.storage, message_sender.clone())
+        .unwrap_or_default();
+
+    let mintable_health = MINTABLE_HEALTH.load(deps.storage)?;
+
+    let collateral_price_in_aed = COLLATERAL_TOKEN_PRICE
+        .may_load(deps.storage)?
+        .ok_or(ContractError::CollateralPriceNotSet {})
+        .unwrap();
+
+    let max_unlockable_collateral = calculate_max_unlockable_collateral(
+        locked_collateral,
+        collateral_price_in_aed,
+        minted_dira,
+        mintable_health,
+    );
+
+    if collateral_amount > max_unlockable_collateral {
+        return Err(ContractError::UnlockAmountTooHigh {
+            max_unlockable: max_unlockable_collateral,
+        });
+    }
 
     match LOCKED_COLLATERAL.update(
         deps.storage,
@@ -255,7 +297,6 @@ fn execute_unlock_collateral(
     ) {
         Ok(_result) => {}
         Err(error) => {
-            dbg!("Error in updating LOCKED_COLLATERAL storage item");
             return Err(error);
         }
     }
@@ -268,17 +309,7 @@ fn execute_unlock_collateral(
         }],
     };
 
-    Ok(Response::new()
-        .add_message(CosmosMsg::Bank(unlock_collateral_message))
-        .add_attribute("action", "unlock_collateral")
-        .add_attribute("sender", message_sender.clone())
-        .add_attribute(
-            "total_funds_locked_by_user",
-            LOCKED_COLLATERAL
-                .load(deps.storage, message_sender)
-                .unwrap_or_default()
-                .to_string(),
-        ))
+    Ok(Response::new().add_message(unlock_collateral_message))
 }
 
 // Function to mint rupees
@@ -314,14 +345,18 @@ fn execute_set_collateral_price_in_dirham(
     sender: String,
     collateral_price_in_aed: Decimal,
 ) -> Result<Response, ContractError> {
-    match COLLATERAL_TOKEN_PRICE.update(
-        deps.storage,
-        |_current_price| -> Result<Decimal, ContractError> { Ok(collateral_price_in_aed) },
-    ) {
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
+    let sender_address = deps.api.addr_validate(&sender)?;
+
+    if !admins.contains(&sender_address) {
+        return Err(ContractError::UnauthorizedUser {});
+    }
+
+    match COLLATERAL_TOKEN_PRICE.save(deps.storage, &collateral_price_in_aed) {
         Ok(_result) => {}
         Err(error) => {
-            dbg!("Error in updating COLLATERAL_TOKEN_PRICE storage item");
-            return Err(error);
+            dbg!(&error);
+            panic!("Error in updating COLLATERAL_TOKEN_PRICE storage item");
         }
     }
 
@@ -329,6 +364,62 @@ fn execute_set_collateral_price_in_dirham(
         .add_attribute("action", "set_collateral_price_in_dirham")
         .add_attribute("sender", sender)
         .add_attribute("new_collateral_price", collateral_price_in_aed.to_string()))
+}
+
+// Function to set liquidation health
+fn execute_set_liquidation_health(
+    deps: DepsMut,
+    sender: String,
+    liquidation_health: Decimal,
+) -> Result<Response, ContractError> {
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
+    let sender_address = deps.api.addr_validate(&sender)?;
+
+    if !admins.contains(&sender_address) {
+        return Err(ContractError::UnauthorizedUser {});
+    }
+
+    LIQUIDATION_HEALTH.update(
+        deps.storage,
+        |_current_liquidation_health| -> Result<Decimal, ContractError> { Ok(liquidation_health) },
+    )?;
+
+    Ok(Response::new()
+        .add_attribute("action", "set_liquidation_health")
+        .add_attribute("sender", sender)
+        .add_attribute("new_liquidation_health", liquidation_health.to_string()))
+}
+
+//
+fn execute_set_mintable_health(
+    deps: DepsMut,
+    sender: String,
+    mintable_health: Decimal,
+) -> Result<Response, ContractError> {
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
+    let sender_address = deps.api.addr_validate(&sender)?;
+
+    if !admins.contains(&sender_address) {
+        return Err(ContractError::UnauthorizedUser {});
+    }
+
+    let current_liquidation_health = LIQUIDATION_HEALTH.load(deps.storage)?;
+
+    MINTABLE_HEALTH.update(
+        deps.storage,
+        |_current_mintable_health| -> Result<Decimal, ContractError> {
+            if mintable_health < current_liquidation_health {
+                return Err(ContractError::MintableHealthLowerThanLiquidationHealth {});
+            } else {
+                return Ok(mintable_health);
+            }
+        },
+    )?;
+
+    Ok(Response::new()
+        .add_attribute("action", "set_mintable_health")
+        .add_attribute("sender", sender)
+        .add_attribute("new_liquidation_health", mintable_health.to_string()))
 }
 
 // Query function to get collateral prices

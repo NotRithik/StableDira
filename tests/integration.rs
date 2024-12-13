@@ -12,9 +12,9 @@ use cosmwasm_vm::{
 use stable_dira::{
     msg::{ExecuteMsg, InstantiateMsg},
     state::LOCKED_COLLATERAL,
-}; // Replace with your contract module
+};
 
-const WASM: &[u8] = include_bytes!("../artifacts/stable_dira.wasm"); // Path to compiled Wasm
+const WASM: &[u8] = include_bytes!("../artifacts/stable_dira.wasm");
 
 /// Sets up a mock instance and instantiates the contract.
 /// Returns the initialized `Instance` and `Response`.
@@ -26,7 +26,8 @@ fn setup_instance() -> (Instance<MockApi, MockStorage, MockQuerier>, Response, E
         let info = mock_info("creator", &[]);
 
         let msg = InstantiateMsg {
-            liquidation_health: Decimal::from_ratio(3u32, 2u32),
+            liquidation_health: Decimal::from_ratio(11u32, 10u32),
+            mintable_health: Decimal::from_ratio(13u32, 10u32), // Added mintable_health
             collateral_token_denom: String::from("uatom"),
         };
 
@@ -50,8 +51,90 @@ fn test_setup_instance() {
 }
 
 #[test]
+fn test_admin_functions() {
+    let (mut instance, _response, env) = setup_instance();
+
+    let admin_info = mock_info("creator", &[]);
+    let non_admin_info = mock_info("non_admin", &[]);
+
+    // Test Set Collateral Price
+    let set_collateral_price_msg = ExecuteMsg::SetCollateralPriceInDirham {
+        collateral_price_in_aed: Decimal::from_ratio(3309u128, 100u128),
+    };
+    let res: ContractResult<Response> = call_execute(
+        instance.borrow_mut(),
+        &env,
+        &admin_info,
+        &to_vec(&set_collateral_price_msg).unwrap(),
+    ).unwrap();
+    assert!(res.is_ok());
+
+    let res: ContractResult<Response> = call_execute(
+        instance.borrow_mut(),
+        &env,
+        &non_admin_info,
+        &to_vec(&set_collateral_price_msg).unwrap(),
+    ).unwrap();
+
+    assert!(res.is_err());
+
+    // Test Set Mintable Health
+    let set_mintable_health_msg = ExecuteMsg::SetMintableHealth {
+        mintable_health: Decimal::percent(195),
+    };
+    let res: ContractResult<Response> = call_execute(
+        instance.borrow_mut(),
+        &env,
+        &admin_info,
+        &to_vec(&set_mintable_health_msg).unwrap(),
+    ).unwrap();
+    assert!(res.is_ok());
+
+    let res: ContractResult<Response> = call_execute(
+        instance.borrow_mut(),
+        &env,
+        &non_admin_info,
+        &to_vec(&set_mintable_health_msg).unwrap(),
+    ).unwrap();
+
+    assert!(res.is_err());
+
+    // Test Set Liquidation Health
+    let set_liquidation_health_msg = ExecuteMsg::SetLiquidationHealth {
+        liquidation_health: Decimal::percent(85),
+    };
+    let res: ContractResult<Response> = call_execute(
+        instance.borrow_mut(),
+        &env,
+        &admin_info,
+        &to_vec(&set_liquidation_health_msg).unwrap(),
+    ).unwrap();
+
+    assert!(res.is_ok());
+
+    let res: ContractResult<Response> = call_execute(
+        instance.borrow_mut(),
+        &env,
+        &non_admin_info,
+        &to_vec(&set_liquidation_health_msg).unwrap(),
+    ).unwrap();
+
+    assert!(res.is_err());
+}
+
+#[test]
 fn test_lock_unlock_collateral() {
     let (mut instance, _response, env) = setup_instance();
+
+    let set_collateral_price_msg = ExecuteMsg::SetCollateralPriceInDirham {
+        collateral_price_in_aed: Decimal::from_ratio(3309u128, 100u128),
+    };
+    let res: ContractResult<Response> = call_execute(
+        instance.borrow_mut(),
+        &env,
+        &mock_info("creator", &[]),
+        &to_vec(&set_collateral_price_msg).unwrap(),
+    ).unwrap();
 
     let msg_to_execute = ExecuteMsg::LockCollateral {
         collateral_amount_to_lock: Decimal::from_ratio(103u128, 1u128),
@@ -74,8 +157,7 @@ fn test_lock_unlock_collateral() {
     let res: ContractResult<Response> =
         call_execute(instance.borrow_mut(), &env, &info, msg_binary).unwrap();
 
+    dbg!(&res);
     assert!(res.is_ok());
     dbg!("Successfully locked and unlocked collateral!");
 }
-
-//TODO: MODIFY TESTS TO WORK WITH UPDATED CONTRACT

@@ -18,23 +18,22 @@ pub struct InstantiateMsg {
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     // All functions related to locking / unlocking collateral tokens with the smart contract
-
     LockCollateral { collateral_amount_to_lock: Decimal },
-
     UnlockCollateral { collateral_amount_to_unlock: Decimal },
 
     // All functions related to minting / returning rupees
-
     MintDira { dira_to_mint: Decimal },
     RedeemDira { dira_to_redeem: Decimal },
 
     // Liquidate someone's stablecoins if their stablecoin health goes below a certain health
-
     LiquidateStablecoins { liquidate_stablecoin_minter_address: String },
 
     // Function to set collateral prices from oracles
-
     SetCollateralPriceInDirham { collateral_price_in_aed: Decimal },
+
+    // Function to set liquidation health and mintable health by admins
+    SetLiquidationHealth { liquidation_health: Decimal },
+    SetMintableHealth { mintable_health: Decimal },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
