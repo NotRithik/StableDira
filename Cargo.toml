@@ -32,13 +32,6 @@ overflow-checks = true
 # use library feature to disable all instantiate/execute/query exports
 library = []
 
-[package.metadata.scripts]
-optimize = """docker run --rm -v "$(pwd)":/code \\
-  --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target \\
-  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \\
-  cosmwasm/optimizer:0.16.0
-"""
-
 [dependencies]
 cosmwasm-std = "1.5.8"
 cosmwasm-storage = "1.5.2"
@@ -61,8 +54,11 @@ cosmwasm-schema = { version = "1.5.2" }
 # wasmer-vm = "5.0.1"
 
 [dev-dependencies]
-
 # STUFF BELOW IS REQUIRED ONLY FOR TEST BUILDS
-
 cosmwasm-vm = "1.5.8"
 getrandom = { version = "0.2.15", features = ["js"] }
+
+[[bin]]
+name = "schema"
+path = "src/schema.rs"
+
