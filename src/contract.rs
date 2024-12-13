@@ -3,8 +3,8 @@ use core::panic;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Response, StdResult, Uint128, WasmMsg, WasmQuery,
+    Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env,
+    MessageInfo, Response, StdResult, Uint128
 };
 
 use cw2::set_contract_version;
@@ -17,7 +17,6 @@ use crate::state::{
 };
 
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg};
-use cw721::{Cw721ExecuteMsg, Cw721QueryMsg};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:cosmwasm-stable-rupee";
@@ -390,7 +389,7 @@ fn execute_set_liquidation_health(
         .add_attribute("new_liquidation_health", liquidation_health.to_string()))
 }
 
-//
+// Function to set mintable health
 fn execute_set_mintable_health(
     deps: DepsMut,
     sender: String,
