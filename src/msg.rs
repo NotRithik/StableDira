@@ -10,6 +10,7 @@ use cosmwasm_std::{Addr, Decimal};
 // #[cw_serde]
 pub struct InstantiateMsg {
     pub liquidation_health: Decimal,
+    pub mintable_health: Decimal,
     pub collateral_token_denom: String,
 }
 
@@ -33,7 +34,7 @@ pub enum ExecuteMsg {
 
     // Function to set collateral prices from oracles
 
-    SetCollateralPricesInDirham { collateral_price_in_aed: Decimal },
+    SetCollateralPriceInDirham { collateral_price_in_aed: Decimal },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -1,3 +1,5 @@
+use core::panic;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
@@ -10,8 +12,8 @@ use cw2::set_contract_version;
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{
-    ADMIN_ADDRESS, COLLATERAL_TOKEN_DENOM, COLLATERAL_TOKEN_PRICE, LIQUIDATION_HEALTH,
-    LOCKED_COLLATERAL, MINTED_DIRA,
+    ADMIN_ADDRESSES, COLLATERAL_TOKEN_DENOM, COLLATERAL_TOKEN_PRICE, LIQUIDATION_HEALTH,
+    LOCKED_COLLATERAL, MINTABLE_HEALTH, MINTED_DIRA,
 };
 
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg};
@@ -39,21 +41,26 @@ pub fn instantiate(
     deps.api.debug("Instantiating contract...");
     deps.api.debug(&format!("Received message: {:?}", msg));
 
-    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION);
+    if msg.liquidation_health.is_zero() || msg.mintable_health.is_zero() {
+        return Err(ContractError::HealthCannotBeZero {});
+    }
 
-    ADMIN_ADDRESS.save(deps.storage, &info.sender);
-    LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health);
-    COLLATERAL_TOKEN_DENOM.save(deps.storage, &msg.collateral_token_denom);
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    ADMIN_ADDRESSES.save(deps.storage, &vec![info.sender.clone()])?;
+    LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health)?;
+    MINTABLE_HEALTH.save(deps.storage, &msg.mintable_health)?;
+    COLLATERAL_TOKEN_DENOM.save(deps.storage, &msg.collateral_token_denom)?;
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
-        .add_attribute("owner", info.sender))
+        .add_attribute("admin", info.sender))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
@@ -63,11 +70,11 @@ pub fn execute(
     match msg {
         ExecuteMsg::LockCollateral {
             collateral_amount_to_lock,
-        } => execute_lock_collateral(deps, info, env, collateral_amount_to_lock),
+        } => execute_lock_collateral(deps, info, collateral_amount_to_lock),
 
         ExecuteMsg::UnlockCollateral {
             collateral_amount_to_unlock,
-        } => execute_unlock_collateral(deps, info, env, collateral_amount_to_unlock),
+        } => execute_unlock_collateral(deps, info, collateral_amount_to_unlock),
 
         ExecuteMsg::MintDira { dira_to_mint } => {
             execute_mint_dira(deps, info.sender.into_string(), dira_to_mint)
@@ -84,9 +91,9 @@ pub fn execute(
             liquidate_stablecoin_minter_address,
         ),
 
-        ExecuteMsg::SetCollateralPricesInDirham {
+        ExecuteMsg::SetCollateralPriceInDirham {
             collateral_price_in_aed,
-        } => execute_set_collateral_prices_in_dirham(
+        } => execute_set_collateral_price_in_dirham(
             deps,
             info.sender.into_string(),
             collateral_price_in_aed,
@@ -113,11 +120,61 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
  * THIS IS THE SECTION FOR ACTUAL IMPLEMENTATIONS OF ALL THE FUNCTIONS USED ABOVE!
  ****/
 
+// Function to calculate stablecoin health of a particular user
+// based on how much stablecoin they've minted and how much
+// collateral they have locked
+fn calculate_stablecoin_health(
+    minted_dira: Decimal,
+    locked_collateral: Decimal,
+    collateral_price_in_aed: Decimal,
+) -> Decimal {
+    let locked_collateral_value_in_aed = collateral_price_in_aed * locked_collateral;
+
+    if minted_dira.is_zero() {
+        if !locked_collateral_value_in_aed.is_zero() {
+            return Decimal::zero();
+        } else {
+            return Decimal::MAX;
+        }
+    }
+
+    return locked_collateral_value_in_aed / minted_dira;
+}
+
+// Function to calculate how much Dira the user can mint
+// based on how much collateral is locked, what the
+// value of the collateral is and what the
+// mintable health is
+fn calculate_max_mintable_dira(
+    locked_collateral: Decimal,
+    collateral_price_in_aed: Decimal,
+    mintable_health: Decimal,
+) -> Decimal {
+    let max_mintable_dira = (locked_collateral * collateral_price_in_aed) / mintable_health;
+
+    max_mintable_dira
+}
+
+// Function to calculate how much collateral can be unlocked
+// based on how much Dira the user has minted, what the value
+// of the collateral is, and what the liquidation health is
+fn calculate_max_unlockable_collateral(
+    locked_collateral: Decimal,
+    collateral_price_in_aed: Decimal,
+    minted_dira: Decimal,
+    mintable_health: Decimal
+) -> Decimal {
+    let required_collateral_for_minted_dira = (minted_dira * mintable_health) / collateral_price_in_aed;
+    let unlockable_collateral = locked_collateral - required_collateral_for_minted_dira;
+
+    unlockable_collateral
+}
+
 // Function to lock collateral
 fn execute_lock_collateral(
     deps: DepsMut,
     info: MessageInfo,
-    env: Env,
+    // env: Env,
     collateral_amount: Decimal,
 ) -> Result<Response, ContractError> {
     let collateral_token_denom = COLLATERAL_TOKEN_DENOM
@@ -139,13 +196,19 @@ fn execute_lock_collateral(
         return Err(ContractError::InsufficientFundsSent {});
     }
 
-    LOCKED_COLLATERAL.update(
+    match LOCKED_COLLATERAL.update(
         deps.storage,
         message_sender.clone(),
-        |balance: Option<Decimal>| -> Result<_, ContractError> {
+        |balance: Option<Decimal>| -> Result<Decimal, ContractError> {
             Ok(balance.unwrap_or_default() + collateral_amount)
         },
-    )?;
+    ) {
+        Ok(_result) => {}
+        Err(error) => {
+            dbg!("Error in updating LOCKED_COLLATERAL storage item");
+            return Err(error);
+        }
+    };
 
     // Send the lock collateral messages and return the Ok response
     Ok(Response::new()
@@ -164,16 +227,21 @@ fn execute_lock_collateral(
 fn execute_unlock_collateral(
     deps: DepsMut,
     info: MessageInfo,
-    env: Env,
+    // env: Env,
     collateral_amount: Decimal,
 ) -> Result<Response, ContractError> {
-    let collateral_token_denom = COLLATERAL_TOKEN_DENOM.load(deps.storage).unwrap_or(String::from("uatom"));
+    panic!("READ TODO IN UNLOCK COLLATERAL");
+    // TODO: make it so that you check what the max unlockable collateral is and only allow
+    // the user to unlock less than or equal to that amount
+    let collateral_token_denom = COLLATERAL_TOKEN_DENOM
+        .load(deps.storage)
+        .unwrap_or(String::from("uatom"));
     let message_sender = info.sender;
 
-    LOCKED_COLLATERAL.update(
+    match LOCKED_COLLATERAL.update(
         deps.storage,
         message_sender.clone(),
-        |balance: Option<Decimal>| -> Result<_, ContractError> {
+        |balance: Option<Decimal>| -> Result<Decimal, ContractError> {
             match balance {
                 Some(bal) => {
                     if bal < collateral_amount {
@@ -184,7 +252,13 @@ fn execute_unlock_collateral(
                 None => Err(ContractError::InsufficientCollateral {}),
             }
         },
-    )?;
+    ) {
+        Ok(_result) => {}
+        Err(error) => {
+            dbg!("Error in updating LOCKED_COLLATERAL storage item");
+            return Err(error);
+        }
+    }
 
     let unlock_collateral_message = BankMsg::Send {
         to_address: message_sender.to_string(),
@@ -235,12 +309,26 @@ fn execute_liquidate_stablecoin_minter(
 }
 
 // Function to set collateral prices in rupees
-fn execute_set_collateral_prices_in_dirham(
+fn execute_set_collateral_price_in_dirham(
     deps: DepsMut,
     sender: String,
-    collateral_prices_in_rupees: Decimal,
+    collateral_price_in_aed: Decimal,
 ) -> Result<Response, ContractError> {
-    panic!("TODO: Implement this function!");
+    match COLLATERAL_TOKEN_PRICE.update(
+        deps.storage,
+        |_current_price| -> Result<Decimal, ContractError> { Ok(collateral_price_in_aed) },
+    ) {
+        Ok(_result) => {}
+        Err(error) => {
+            dbg!("Error in updating COLLATERAL_TOKEN_PRICE storage item");
+            return Err(error);
+        }
+    }
+
+    Ok(Response::new()
+        .add_attribute("action", "set_collateral_price_in_dirham")
+        .add_attribute("sender", sender)
+        .add_attribute("new_collateral_price", collateral_price_in_aed.to_string()))
 }
 
 // Query function to get collateral prices

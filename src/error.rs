@@ -14,7 +14,10 @@ pub enum ContractError {
 
     #[error("Insufficient collateral to unlock")]
     InsufficientCollateral {},
-    
+
+    #[error("Liquidation health or mintable health cannot be zero")]
+    HealthCannotBeZero {},
+
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

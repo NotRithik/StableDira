@@ -77,3 +77,5 @@ fn test_lock_unlock_collateral() {
     assert!(res.is_ok());
     dbg!("Successfully locked and unlocked collateral!");
 }
+
+//TODO: MODIFY TESTS TO WORK WITH UPDATED CONTRACT
