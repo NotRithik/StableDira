@@ -1,18 +1,15 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::BorrowMut;
 
-use cosmwasm_std::{coins, to_json_binary, to_json_string, ContractResult, Decimal, Env, Response};
+use cosmwasm_std::{coins, to_json_binary, ContractResult, Decimal, Env, Response};
 use cosmwasm_vm::{
     call_execute, call_instantiate,
     testing::{
         mock_env, mock_info, mock_instance_with_gas_limit, MockApi, MockQuerier, MockStorage,
     },
-    to_vec, Instance, Storage, VmError, VmResult,
+    to_vec, Instance, VmResult,
 };
 
-use stable_dira::{
-    msg::{ExecuteMsg, InstantiateMsg},
-    state::LOCKED_COLLATERAL,
-};
+use stable_dira::msg::{ExecuteMsg, InstantiateMsg};
 
 const WASM: &[u8] = include_bytes!("../artifacts/stable_dira.wasm");
 
@@ -66,7 +63,8 @@ fn test_admin_functions() {
         &env,
         &admin_info,
         &to_vec(&set_collateral_price_msg).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(res.is_ok());
 
@@ -75,7 +73,8 @@ fn test_admin_functions() {
         &env,
         &non_admin_info,
         &to_vec(&set_collateral_price_msg).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(res.is_err());
 
@@ -88,7 +87,8 @@ fn test_admin_functions() {
         &env,
         &admin_info,
         &to_vec(&set_mintable_health_msg).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
     assert!(res.is_ok());
 
     let res: ContractResult<Response> = call_execute(
@@ -96,7 +96,8 @@ fn test_admin_functions() {
         &env,
         &non_admin_info,
         &to_vec(&set_mintable_health_msg).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(res.is_err());
 
@@ -109,7 +110,8 @@ fn test_admin_functions() {
         &env,
         &admin_info,
         &to_vec(&set_liquidation_health_msg).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(res.is_ok());
 
@@ -118,7 +120,8 @@ fn test_admin_functions() {
         &env,
         &non_admin_info,
         &to_vec(&set_liquidation_health_msg).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(res.is_err());
 }
@@ -135,24 +138,23 @@ fn test_lock_unlock_collateral() {
         &env,
         &mock_info("creator", &[]),
         &to_vec(&set_collateral_price_msg).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(res.is_ok());
 
-    let msg_to_execute = ExecuteMsg::LockCollateral {
-        collateral_amount_to_lock: Decimal::from_ratio(103u128, 1u128),
-    };
+    let msg_to_execute = ExecuteMsg::LockCollateral {};
 
     let msg_binary = &*to_json_binary(&msg_to_execute).unwrap();
 
-    let info = mock_info("creator", &coins(103, "uatom"));
+    let info = mock_info("creator", &coins(1204, "uatom"));
     let res: ContractResult<Response> =
         call_execute(instance.borrow_mut(), &env, &info, msg_binary).unwrap();
 
     assert!(res.is_ok());
 
     let unlock_msg_to_execute = ExecuteMsg::UnlockCollateral {
-        collateral_amount_to_unlock: Decimal::from_ratio(103u128, 1u128),
+        collateral_amount_to_unlock: Decimal::from_atomics(1204u128, 6).unwrap(),
     };
 
     let msg_binary = &*to_json_binary(&unlock_msg_to_execute).unwrap();
@@ -160,7 +162,18 @@ fn test_lock_unlock_collateral() {
     let res: ContractResult<Response> =
         call_execute(instance.borrow_mut(), &env, &info, msg_binary).unwrap();
 
-    dbg!(&res);
     assert!(res.is_ok());
+
+    let unlock_msg_to_execute = ExecuteMsg::UnlockCollateral {
+        collateral_amount_to_unlock: Decimal::from_atomics(1204u128, 6).unwrap(),
+    };
+
+    let msg_binary = &*to_json_binary(&unlock_msg_to_execute).unwrap();
+    let info = mock_info("creator", &[]); // No funds sent for unlock operation
+    let res: ContractResult<Response> =
+        call_execute(instance.borrow_mut(), &env, &info, msg_binary).unwrap();
+
+    assert!(res.is_err());
+
     dbg!("Successfully locked and unlocked collateral!");
 }

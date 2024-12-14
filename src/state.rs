@@ -1,6 +1,3 @@
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-
 use cosmwasm_std::{Addr, Decimal};
 
 // What token is allowed to be used as collateral for Dira

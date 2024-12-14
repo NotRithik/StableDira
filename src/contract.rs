@@ -4,7 +4,6 @@ use core::panic;
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-    Uint128,
 };
 
 use cw2::set_contract_version;
@@ -75,9 +74,7 @@ pub fn execute(
     deps.api.debug(&format!("Received message: {:?}", &msg));
 
     match msg {
-        ExecuteMsg::LockCollateral {
-            collateral_amount_to_lock,
-        } => execute_lock_collateral(deps, info, collateral_amount_to_lock),
+        ExecuteMsg::LockCollateral {} => execute_lock_collateral(deps, info),
 
         ExecuteMsg::UnlockCollateral {
             collateral_amount_to_unlock,
@@ -176,12 +173,7 @@ fn calculate_max_unlockable_collateral(
 }
 
 // Function to lock collateral
-fn execute_lock_collateral(
-    deps: DepsMut,
-    info: MessageInfo,
-    // env: Env,
-    collateral_amount: Decimal,
-) -> Result<Response, ContractError> {
+fn execute_lock_collateral(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
     let collateral_token_denom = COLLATERAL_TOKEN_DENOM
         .load(deps.storage)
         .map_err(|_| ContractError::MissingCollateralTokenDenom {})?;
@@ -196,17 +188,13 @@ fn execute_lock_collateral(
         .ok_or(ContractError::InsufficientFundsSent {})
         .unwrap();
 
-    let sent_amount = Decimal::from_ratio(sent_funds.amount, Uint128::new(1));
-
-    if sent_amount < collateral_amount {
-        return Err(ContractError::InsufficientFundsSent {});
-    }
+    let sent_amount = Decimal::from_atomics(sent_funds.amount, 6).unwrap();
 
     match LOCKED_COLLATERAL.update(
         deps.storage,
         message_sender.clone(),
         |balance: Option<Decimal>| -> Result<Decimal, ContractError> {
-            Ok(balance.unwrap_or_default() + collateral_amount)
+            Ok(balance.unwrap_or_default() + sent_amount)
         },
     ) {
         Ok(_result) => {}
