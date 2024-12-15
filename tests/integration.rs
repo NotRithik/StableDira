@@ -56,7 +56,7 @@ fn test_admin_functions() {
 
     // Test Set Collateral Price
     let set_collateral_price_msg = ExecuteMsg::SetCollateralPriceInDirham {
-        collateral_price_in_aed: Decimal::from_ratio(3309u128, 100u128),
+        collateral_price_in_dirham: Decimal::from_ratio(3309u128, 100u128),
     };
     let res: ContractResult<Response> = call_execute(
         instance.borrow_mut(),
@@ -131,7 +131,7 @@ fn test_lock_unlock_collateral() {
     let (mut instance, _response, env) = setup_instance();
 
     let set_collateral_price_msg = ExecuteMsg::SetCollateralPriceInDirham {
-        collateral_price_in_aed: Decimal::from_ratio(3309u128, 100u128),
+        collateral_price_in_dirham: Decimal::from_ratio(3309u128, 100u128),
     };
     let res: ContractResult<Response> = call_execute(
         instance.borrow_mut(),

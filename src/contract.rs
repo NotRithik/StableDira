@@ -18,7 +18,7 @@ use crate::state::{
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg};
 
 // version info for migration info
-const CONTRACT_NAME: &str = "crates.io:cosmwasm-stable-rupee";
+const CONTRACT_NAME: &str = "crates.io:cosmwasm-stable-dira";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /****
@@ -90,8 +90,8 @@ pub fn execute(
         } => execute_liquidate_stablecoin_minter(deps, info, wallet_address_to_liquidate),
 
         ExecuteMsg::SetCollateralPriceInDirham {
-            collateral_price_in_aed,
-        } => execute_set_collateral_price_in_dirham(deps, info, collateral_price_in_aed),
+            collateral_price_in_dirham,
+        } => execute_set_collateral_price_in_dirham(deps, info, collateral_price_in_dirham),
 
         ExecuteMsg::SetLiquidationHealth { liquidation_health } => {
             execute_set_liquidation_health(deps, info, liquidation_health)
@@ -127,19 +127,19 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 fn helper_calculate_stablecoin_health(
     minted_dira: Decimal,
     locked_collateral: Decimal,
-    collateral_price_in_aed: Decimal,
+    collateral_price_in_dirham: Decimal,
 ) -> Decimal {
-    let locked_collateral_value_in_aed = collateral_price_in_aed * locked_collateral;
+    let locked_collateral_value_in_dirham = collateral_price_in_dirham * locked_collateral;
 
     if minted_dira.is_zero() {
-        if !locked_collateral_value_in_aed.is_zero() {
+        if !locked_collateral_value_in_dirham.is_zero() {
             return Decimal::zero();
         } else {
             return Decimal::MAX;
         }
     }
 
-    return locked_collateral_value_in_aed / minted_dira;
+    return locked_collateral_value_in_dirham / minted_dira;
 }
 
 // Function to calculate how much Dira the user can mint
@@ -148,10 +148,10 @@ fn helper_calculate_stablecoin_health(
 // mintable health is
 fn helper_calculate_max_mintable_dira(
     locked_collateral: Decimal,
-    collateral_price_in_aed: Decimal,
+    collateral_price_in_dirham: Decimal,
     mintable_health: Decimal,
 ) -> Decimal {
-    let max_mintable_dira = (locked_collateral * collateral_price_in_aed) / mintable_health;
+    let max_mintable_dira = (locked_collateral * collateral_price_in_dirham) / mintable_health;
 
     max_mintable_dira
 }
@@ -161,12 +161,12 @@ fn helper_calculate_max_mintable_dira(
 // of the collateral is, and what the liquidation health is
 fn helper_calculate_max_unlockable_collateral(
     locked_collateral: Decimal,
-    collateral_price_in_aed: Decimal,
+    collateral_price_in_dirham: Decimal,
     minted_dira: Decimal,
     mintable_health: Decimal,
 ) -> Decimal {
     let required_collateral_for_minted_dira =
-        (minted_dira * mintable_health) / collateral_price_in_aed;
+        (minted_dira * mintable_health) / collateral_price_in_dirham;
     let unlockable_collateral = locked_collateral - required_collateral_for_minted_dira;
 
     unlockable_collateral
@@ -239,14 +239,14 @@ fn execute_unlock_collateral(
 
     let mintable_health = MINTABLE_HEALTH.load(deps.storage)?;
 
-    let collateral_price_in_aed = COLLATERAL_TOKEN_PRICE
+    let collateral_price_in_dirham = COLLATERAL_TOKEN_PRICE
         .may_load(deps.storage)?
         .ok_or(ContractError::CollateralPriceNotSet {})
         .unwrap();
 
     let max_unlockable_collateral = helper_calculate_max_unlockable_collateral(
         locked_collateral,
-        collateral_price_in_aed,
+        collateral_price_in_dirham,
         minted_dira,
         mintable_health,
     );
@@ -299,7 +299,7 @@ fn execute_unlock_collateral(
         ))
 }
 
-// Function to mint rupees
+// Function to mint dira
 fn execute_mint_dira(
     deps: DepsMut,
     info: MessageInfo,
@@ -320,7 +320,7 @@ fn execute_mint_dira(
         _ => Decimal::zero(),
     };
 
-    let collateral_price_in_aed = match COLLATERAL_TOKEN_PRICE.may_load(deps.storage) {
+    let collateral_price_in_dirham = match COLLATERAL_TOKEN_PRICE.may_load(deps.storage) {
         Ok(Some(collateral_price)) => collateral_price,
         _ => return Err(ContractError::CollateralPriceNotSet {}),
     };
@@ -330,7 +330,7 @@ fn execute_mint_dira(
     // Finally use the helper function to calculate max mintable dira by this user
     let max_mintable_dira = helper_calculate_max_mintable_dira(
         collateral_locked_by_user,
-        collateral_price_in_aed,
+        collateral_price_in_dirham,
         mintable_health,
     );
 
@@ -357,7 +357,7 @@ fn execute_mint_dira(
         ))
 }
 
-// Function to return rupees
+// Function to return dira
 fn execute_return_dira(
     deps: DepsMut,
     info: MessageInfo,
@@ -407,7 +407,7 @@ fn execute_liquidate_stablecoin_minter(
         .load(deps.storage, wallet_address_to_liquidate.clone())
         .unwrap_or_default();
 
-    let collateral_price_in_aed = COLLATERAL_TOKEN_PRICE.load(deps.storage).unwrap();
+    let collateral_price_in_dirham = COLLATERAL_TOKEN_PRICE.load(deps.storage).unwrap();
 
     let collateral_locked_by_user_to_liquidate = LOCKED_COLLATERAL
         .load(deps.storage, wallet_address_to_liquidate.clone())
@@ -418,7 +418,7 @@ fn execute_liquidate_stablecoin_minter(
     if helper_calculate_stablecoin_health(
         dira_minted_by_wallet_to_liquidate,
         collateral_locked_by_user_to_liquidate,
-        collateral_price_in_aed,
+        collateral_price_in_dirham,
     ) < liquidation_health
     {
         LOCKED_COLLATERAL.save(
@@ -449,11 +449,11 @@ fn execute_liquidate_stablecoin_minter(
     }
 }
 
-// Function to set collateral prices in rupees
+// Function to set collateral prices in dirham
 fn execute_set_collateral_price_in_dirham(
     deps: DepsMut,
     info: MessageInfo,
-    collateral_price_in_aed: Decimal,
+    collateral_price_in_dirham: Decimal,
 ) -> Result<Response, ContractError> {
     let admins = ADMIN_ADDRESSES.load(deps.storage)?;
 
@@ -461,7 +461,7 @@ fn execute_set_collateral_price_in_dirham(
         return Err(ContractError::UnauthorizedUser {});
     }
 
-    match COLLATERAL_TOKEN_PRICE.save(deps.storage, &collateral_price_in_aed) {
+    match COLLATERAL_TOKEN_PRICE.save(deps.storage, &collateral_price_in_dirham) {
         Ok(_result) => {}
         Err(error) => {
             dbg!(&error);
@@ -472,7 +472,7 @@ fn execute_set_collateral_price_in_dirham(
     Ok(Response::new()
         .add_attribute("action", "set_collateral_price_in_dirham")
         .add_attribute("sender", info.sender)
-        .add_attribute("new_collateral_price", collateral_price_in_aed.to_string()))
+        .add_attribute("new_collateral_price", collateral_price_in_dirham.to_string()))
 }
 
 // Function to set liquidation health

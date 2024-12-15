@@ -38,7 +38,7 @@ pub enum ExecuteMsg {
 
     // Function to set collateral prices from oracles
     SetCollateralPriceInDirham {
-        collateral_price_in_aed: Decimal,
+        collateral_price_in_dirham: Decimal,
     },
 
     // Function to set liquidation health and mintable health by admins
