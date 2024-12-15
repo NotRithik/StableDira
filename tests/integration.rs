@@ -1,4 +1,4 @@
-use cosmwasm_std::{coins, Addr, Decimal};
+use cosmwasm_std::{coins, Addr, Decimal, Uint128};
 use cw20::MinterResponse;
 use cw20_base::msg::{ExecuteMsg as Cw20ExecuteMsg, InstantiateMsg as Cw20InstantiateMsg};
 use cw_multi_test::{App, AppBuilder, Contract, ContractWrapper, Executor};
@@ -194,7 +194,7 @@ fn test_lock_unlock_collateral() {
 }
 
 #[test]
-fn test_mint_redeem_dira() {
+fn test_mint_burn_dira() {
     let (mut app, dira_contract_addr, cw20_contract_addr, admin, non_admin) = setup_app();
 
     // Update the CW20 token's minter to the Dira contract
@@ -207,7 +207,6 @@ fn test_mint_redeem_dira() {
         &update_minter_msg,
         &[],
     );
-    dbg!(&res);
     assert!(res.is_ok());
     dbg!("Updated CW20 token minter to Dira contract");
 
@@ -244,5 +243,96 @@ fn test_mint_redeem_dira() {
     assert!(res.is_ok());
     dbg!("Locked collateral from non-admin");
 
-    dbg!("Successfully set up mint/redeem scenario with collateral locked");
+    dbg!("Successfully set up mint/burn scenario with collateral locked");
+
+    // Mint DIRA for admin
+    let mint_dira_msg = DiraExecuteMsg::MintDira {
+        dira_to_mint: Decimal::from_atomics(1_000u128, 6).unwrap(),
+    };
+    let res = app.execute_contract(
+        admin.clone(),
+        dira_contract_addr.clone(),
+        &mint_dira_msg,
+        &[],
+    );
+    assert!(res.is_ok());
+    dbg!("Minted DIRA for admin");
+
+    // Query admin's balance of CW20 DIRA
+    let balance_query = cw20::Cw20QueryMsg::Balance {
+        address: admin.to_string(),
+    };
+    let balance: cw20::BalanceResponse = app
+        .wrap()
+        .query_wasm_smart(cw20_contract_addr.clone(), &balance_query)
+        .unwrap();
+    assert_eq!(balance.balance, Uint128::new(1_000));
+    dbg!("Admin's balance of DIRA:", balance.balance);
+
+    // Burn DIRA from admin
+    let burn_dira_msg = DiraExecuteMsg::BurnDira {
+        dira_to_burn: Decimal::from_atomics(500u128, 6).unwrap(),
+    };
+    let res = app.execute_contract(
+        admin.clone(),
+        dira_contract_addr.clone(),
+        &burn_dira_msg,
+        &[],
+    );
+    dbg!(&res);
+    assert!(res.is_ok());
+    dbg!("Burnt 500 DIRA from admin");
+
+    // Query admin's balance of CW20 DIRA after burning
+    let balance: cw20::BalanceResponse = app
+        .wrap()
+        .query_wasm_smart(cw20_contract_addr.clone(), &balance_query)
+        .unwrap();
+    assert_eq!(balance.balance, Uint128::new(500));
+    dbg!("Admin's balance of DIRA after burning:", balance.balance);
+
+    // Mint DIRA for non-admin
+    let mint_dira_msg = DiraExecuteMsg::MintDira {
+        dira_to_mint: Decimal::from_atomics(500u128, 6).unwrap(),
+    };
+    let res = app.execute_contract(
+        non_admin.clone(),
+        dira_contract_addr.clone(),
+        &mint_dira_msg,
+        &[],
+    );
+    assert!(res.is_ok());
+    dbg!("Minted DIRA for non-admin");
+
+    // Query non-admin's balance of CW20 DIRA
+    let non_admin_balance_query = cw20::Cw20QueryMsg::Balance {
+        address: non_admin.to_string(),
+    };
+    let balance: cw20::BalanceResponse = app
+        .wrap()
+        .query_wasm_smart(cw20_contract_addr.clone(), &non_admin_balance_query)
+        .unwrap();
+    assert_eq!(balance.balance, Uint128::new(500));
+    dbg!("Non-admin's balance of DIRA:", balance.balance);
+
+    // Burn DIRA from non-admin
+    let burn_dira_msg = DiraExecuteMsg::BurnDira {
+        dira_to_burn: Decimal::from_atomics(250u128, 6).unwrap(),
+    };
+    let res = app.execute_contract(
+        non_admin.clone(),
+        dira_contract_addr.clone(),
+        &burn_dira_msg,
+        &[],
+    );
+    assert!(res.is_ok());
+    dbg!("Burned 250 DIRA from non-admin");
+
+    // Query non-admin's balance of CW20 DIRA after burning
+    let balance: cw20::BalanceResponse = app
+        .wrap()
+        .query_wasm_smart(cw20_contract_addr.clone(), &non_admin_balance_query)
+        .unwrap();
+    assert_eq!(balance.balance, Uint128::new(250));
+    dbg!("Non-admin's balance of DIRA after burning:", balance.balance);
 }

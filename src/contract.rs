@@ -58,7 +58,7 @@ pub fn instantiate(
 
     match msg.cw20_dira_contract_address {
         Some(contract_address) => {
-            if (helper_is_cw20_contract(deps.as_ref(), &contract_address)) {
+            if helper_is_cw20_contract(deps.as_ref(), &contract_address) {
                 CW20_DIRA_CONTRACT_ADDRESS.save(deps.storage, &contract_address)?;
             } else {
                 return Err(ContractError::InvalidCW20ContractAddress {});
@@ -90,8 +90,8 @@ pub fn execute(
         } => execute_unlock_collateral(deps, info, collateral_amount_to_unlock),
 
         ExecuteMsg::MintDira { dira_to_mint } => execute_mint_dira(deps, info, dira_to_mint),
-        ExecuteMsg::RedeemDira { dira_to_redeem } => {
-            execute_redeem_dira(deps, info, dira_to_redeem)
+        ExecuteMsg::BurnDira { dira_to_burn } => {
+            execute_burn_dira(deps, info, dira_to_burn)
         }
 
         ExecuteMsg::LiquidateStablecoins {
@@ -368,7 +368,7 @@ fn execute_mint_dira(
     // Mint CW20 tokens
     let mint_msg = cw20::Cw20ExecuteMsg::Mint {
         recipient: info.sender.to_string(),
-        amount: dira_to_mint.atomics(),
+        amount: dira_to_mint.atomics() / Uint128::from(u128::pow(10, 12)),
     };
 
     let mint_cw20_message = cosmwasm_std::WasmMsg::Execute {
@@ -387,8 +387,8 @@ fn execute_mint_dira(
         ))
 }
 
-// Function to redeem dira for the original collateral
-fn execute_redeem_dira(
+// Function to burn dira for the original collateral
+fn execute_burn_dira(
     deps: DepsMut,
     info: MessageInfo,
     dira_to_return: Decimal,
@@ -415,8 +415,9 @@ fn execute_redeem_dira(
     };
 
     // Burn CW20 tokens
-    let burn_msg = cw20::Cw20ExecuteMsg::Burn {
-        amount: dira_to_return.atomics(),
+    let burn_msg = cw20::Cw20ExecuteMsg::BurnFrom {
+        owner: info.sender.to_string(),
+        amount: dira_to_return.atomics() / Uint128::from(u128::pow(10, 12)),
     };
 
     let burn_cw20_message = cosmwasm_std::WasmMsg::Execute {
@@ -427,7 +428,7 @@ fn execute_redeem_dira(
 
     Ok(Response::new()
         .add_message(burn_cw20_message)
-        .add_attribute("action", "redeem_dira")
+        .add_attribute("action", "burn_dira")
         .add_attribute("sender", info.sender.to_string())
         .add_attribute(
             "total_dira_remaining_by_sender",
@@ -578,7 +579,7 @@ fn execute_set_cw20_dira_contact_address(
     deps: DepsMut,
     cw20_dira_contract_address: Addr,
 ) -> Result<Response, ContractError> {
-    if (helper_is_cw20_contract(deps.as_ref(), &cw20_dira_contract_address)) {
+    if helper_is_cw20_contract(deps.as_ref(), &cw20_dira_contract_address) {
         CW20_DIRA_CONTRACT_ADDRESS.save(deps.storage, &cw20_dira_contract_address)?;
         return Ok(Response::new()
             .add_attribute("action", "set_cw20_dira_contract_address")

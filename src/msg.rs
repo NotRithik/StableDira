@@ -28,8 +28,8 @@ pub enum ExecuteMsg {
     MintDira {
         dira_to_mint: Decimal,
     },
-    RedeemDira {
-        dira_to_redeem: Decimal,
+    BurnDira {
+        dira_to_burn: Decimal,
     },
 
     // Liquidate someone's stablecoins if their stablecoin health goes below a certain health
