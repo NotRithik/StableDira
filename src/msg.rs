@@ -33,7 +33,7 @@ pub enum ExecuteMsg {
 
     // Liquidate someone's stablecoins if their stablecoin health goes below a certain health
     LiquidateStablecoins {
-        liquidate_stablecoin_minter_address: String,
+        wallet_address_to_liquidate: Addr,
     },
 
     // Function to set collateral prices from oracles

@@ -86,8 +86,8 @@ pub fn execute(
         }
 
         ExecuteMsg::LiquidateStablecoins {
-            liquidate_stablecoin_minter_address,
-        } => execute_liquidate_stablecoin_minter(deps, info, liquidate_stablecoin_minter_address),
+            wallet_address_to_liquidate,
+        } => execute_liquidate_stablecoin_minter(deps, info, wallet_address_to_liquidate),
 
         ExecuteMsg::SetCollateralPriceInDirham {
             collateral_price_in_aed,
@@ -394,9 +394,59 @@ fn execute_return_dira(
 fn execute_liquidate_stablecoin_minter(
     deps: DepsMut,
     info: MessageInfo,
-    liquidate_stablecoin_minter_address: String,
+    wallet_address_to_liquidate: Addr,
 ) -> Result<Response, ContractError> {
-    panic!("TODO: Implement this function!");
+    //TODO: Add reward for liquidating someone else
+
+    match deps.api.addr_validate(wallet_address_to_liquidate.as_str()) {
+        Ok(_) => {}
+        Err(_) => return Err(ContractError::InvalidWalletAddress {}),
+    };
+
+    let dira_minted_by_wallet_to_liquidate = MINTED_DIRA
+        .load(deps.storage, wallet_address_to_liquidate.clone())
+        .unwrap_or_default();
+
+    let collateral_price_in_aed = COLLATERAL_TOKEN_PRICE.load(deps.storage).unwrap();
+
+    let collateral_locked_by_user_to_liquidate = LOCKED_COLLATERAL
+        .load(deps.storage, wallet_address_to_liquidate.clone())
+        .unwrap_or_default();
+
+    let liquidation_health = LIQUIDATION_HEALTH.load(deps.storage).unwrap();
+
+    if helper_calculate_stablecoin_health(
+        dira_minted_by_wallet_to_liquidate,
+        collateral_locked_by_user_to_liquidate,
+        collateral_price_in_aed,
+    ) < liquidation_health
+    {
+        LOCKED_COLLATERAL.save(
+            deps.storage,
+            wallet_address_to_liquidate.clone(),
+            &Decimal::zero(),
+        )?;
+
+        return Ok(Response::new()
+            .add_attribute("action", "liquidate_stablecoins")
+            .add_attribute("liquidation_attempt_succeeded", "true")
+            .add_attribute("liquidated_wallet", wallet_address_to_liquidate.to_string())
+            .add_attribute(
+                "liquidated_value",
+                collateral_locked_by_user_to_liquidate.to_string(),
+            )
+            .add_attribute("initiator", info.sender.to_string())
+            .add_attribute("liquidator_reward_paid", "0"));
+        // TODO: Enter liquidator reward paid when adding that functionality
+    } else {
+        return Ok(Response::new()
+            .add_attribute("action", "liquidate_stablecoins")
+            .add_attribute("liquidation_attempt_succeeded", "false")
+            .add_attribute("liquidated_wallet", wallet_address_to_liquidate.to_string())
+            .add_attribute("liquidated_value", Decimal::zero().to_string())
+            .add_attribute("initiator", info.sender.to_string())
+            .add_attribute("liquidator_reward_paid", "0"));
+    }
 }
 
 // Function to set collateral prices in rupees
