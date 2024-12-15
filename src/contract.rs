@@ -17,8 +17,6 @@ use crate::state::{
     LOCKED_COLLATERAL, MINTABLE_HEALTH, MINTED_DIRA,
 };
 
-use cw20::{Cw20ExecuteMsg, Cw20QueryMsg};
-
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:cosmwasm-stable-dira";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
