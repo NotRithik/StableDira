@@ -12,7 +12,7 @@ pub enum ContractError {
     #[error("Insufficient funds sent, or funds sent with the incorrect token")]
     InsufficientFundsSent {},
 
-    #[error("Insufficient collateral to unlock")]
+    #[error("Not enough collateral locked")]
     InsufficientCollateral {},
 
     #[error("Liquidation health or mintable health cannot be zero")]

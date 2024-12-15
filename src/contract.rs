@@ -124,7 +124,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 // Function to calculate stablecoin health of a particular user
 // based on how much stablecoin they've minted and how much
 // collateral they have locked
-fn calculate_stablecoin_health(
+fn helper_calculate_stablecoin_health(
     minted_dira: Decimal,
     locked_collateral: Decimal,
     collateral_price_in_aed: Decimal,
@@ -146,7 +146,7 @@ fn calculate_stablecoin_health(
 // based on how much collateral is locked, what the
 // value of the collateral is and what the
 // mintable health is
-fn calculate_max_mintable_dira(
+fn helper_calculate_max_mintable_dira(
     locked_collateral: Decimal,
     collateral_price_in_aed: Decimal,
     mintable_health: Decimal,
@@ -159,7 +159,7 @@ fn calculate_max_mintable_dira(
 // Function to calculate how much collateral can be unlocked
 // based on how much Dira the user has minted, what the value
 // of the collateral is, and what the liquidation health is
-fn calculate_max_unlockable_collateral(
+fn helper_calculate_max_unlockable_collateral(
     locked_collateral: Decimal,
     collateral_price_in_aed: Decimal,
     minted_dira: Decimal,
@@ -244,7 +244,7 @@ fn execute_unlock_collateral(
         .ok_or(ContractError::CollateralPriceNotSet {})
         .unwrap();
 
-    let max_unlockable_collateral = calculate_max_unlockable_collateral(
+    let max_unlockable_collateral = helper_calculate_max_unlockable_collateral(
         locked_collateral,
         collateral_price_in_aed,
         minted_dira,
@@ -278,7 +278,7 @@ fn execute_unlock_collateral(
         }
     }
 
-    let unlock_collateral_message = BankMsg::Send {
+    let return_collateral_to_user_message = BankMsg::Send {
         to_address: message_sender.to_string(),
         amount: vec![Coin {
             denom: collateral_token_denom,
@@ -286,7 +286,17 @@ fn execute_unlock_collateral(
         }],
     };
 
-    Ok(Response::new().add_message(unlock_collateral_message))
+    Ok(Response::new()
+        .add_message(return_collateral_to_user_message)
+        .add_attribute("action", "unlock_collateral")
+        .add_attribute("sender", message_sender.clone())
+        .add_attribute(
+            "total_funds_locked_by_user",
+            LOCKED_COLLATERAL
+                .load(deps.storage, message_sender)
+                .unwrap_or_default()
+                .to_string(),
+        ))
 }
 
 // Function to mint rupees
@@ -295,7 +305,53 @@ fn execute_mint_dira(
     info: MessageInfo,
     dira_to_mint: Decimal,
 ) -> Result<Response, ContractError> {
+    // First calculate how much dira this user can mint based on current collateral price
+    // and how much collateral they have locked
+
+    // To do this, first load all the variables from the blockchain
+    let collateral_locked_by_user =
+        match LOCKED_COLLATERAL.may_load(deps.storage, info.sender.clone()) {
+            Ok(Some(locked_collateral)) => locked_collateral,
+            _ => return Err(ContractError::InsufficientCollateral {}),
+        };
+
+    let previously_minted_dira = match MINTED_DIRA.may_load(deps.storage, info.sender.clone()) {
+        Ok(Some(minted_dira)) => minted_dira,
+        _ => Decimal::zero(),
+    };
+
+    let collateral_price_in_aed = match COLLATERAL_TOKEN_PRICE.may_load(deps.storage) {
+        Ok(Some(collateral_price)) => collateral_price,
+        _ => return Err(ContractError::CollateralPriceNotSet {}),
+    };
+
+    let mintable_health = MINTABLE_HEALTH.load(deps.storage).unwrap();
+
+    // Finally use the helper function to calculate max mintable dira by this user
+    let max_mintable_dira = helper_calculate_max_mintable_dira(
+        collateral_locked_by_user,
+        collateral_price_in_aed,
+        mintable_health,
+    );
+
+    if dira_to_mint + previously_minted_dira > max_mintable_dira {
+        return Err(ContractError::InsufficientCollateral {});
+    }
+
+    // Else, mint dira and transfer it to user, add that message to the response
+    MINTED_DIRA.save(
+        deps.storage,
+        info.sender,
+        &(dira_to_mint + previously_minted_dira),
+    )?;
+
+    // TODO: Mint cw20 dira and transfer it to user
     panic!("TODO: Implement this function!");
+
+    Ok(Response::new()
+        .add_attribute("action", "mint_dira")
+        .add_attribute("sender", info.sender)
+        .add_attribute("total_dira_minted_by_sender", dira_to_mint + previously_minted_dira))
 }
 
 // Function to return rupees
