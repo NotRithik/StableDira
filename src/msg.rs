@@ -23,7 +23,7 @@ pub enum ExecuteMsg {
         collateral_amount_to_unlock: Decimal,
     },
 
-    // All functions related to minting / returning rupees
+    // All functions related to minting / returning dira
     MintDira {
         dira_to_mint: Decimal,
     },
