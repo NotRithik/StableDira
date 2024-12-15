@@ -30,3 +30,7 @@ pub const MINTED_DIRA: cw_storage_plus::Map<Addr, Decimal> =
 // Collateral prices in dirham
 pub const COLLATERAL_TOKEN_PRICE: cw_storage_plus::Item<Decimal> =
     cw_storage_plus::Item::new("collateral-price");
+
+// Contract address of the cw20 Dira token
+pub const CW20_DIRA_CONTRACT_ADDRESS: cw_storage_plus::Item<Addr> =
+    cw_storage_plus::Item::new("cw20-dira-contract-address");

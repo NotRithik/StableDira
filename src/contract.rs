@@ -4,17 +4,18 @@ use std::convert::TryInto;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-    Uint128,
+    to_json_binary, Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env, MessageInfo,
+    QueryRequest, Response, StdResult, Uint128, WasmQuery,
 };
 
 use cw2::set_contract_version;
+use cw20::TokenInfoResponse;
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{
-    ADMIN_ADDRESSES, COLLATERAL_TOKEN_DENOM, COLLATERAL_TOKEN_PRICE, LIQUIDATION_HEALTH,
-    LOCKED_COLLATERAL, MINTABLE_HEALTH, MINTED_DIRA,
+    ADMIN_ADDRESSES, COLLATERAL_TOKEN_DENOM, COLLATERAL_TOKEN_PRICE, CW20_DIRA_CONTRACT_ADDRESS,
+    LIQUIDATION_HEALTH, LOCKED_COLLATERAL, MINTABLE_HEALTH, MINTED_DIRA,
 };
 
 // version info for migration info
@@ -33,8 +34,6 @@ pub fn instantiate(
     _env: Env,
     info: MessageInfo,
     msg: InstantiateMsg,
-    // liquidation_health: f32,
-    // allowed_collaterals: Vec<CollateralToken>,
 ) -> Result<Response, ContractError> {
     deps.api.debug("Instantiating contract...");
     deps.api.debug(&format!("Received message: {:?}", msg));
@@ -57,6 +56,17 @@ pub fn instantiate(
     LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health)?;
     MINTABLE_HEALTH.save(deps.storage, &msg.mintable_health)?;
     COLLATERAL_TOKEN_DENOM.save(deps.storage, &msg.collateral_token_denom)?;
+
+    match msg.cw20_dira_contract_address {
+        Some(contract_address) => {
+            if (helper_is_cw20_contract(deps.as_ref(), &contract_address)) {
+                CW20_DIRA_CONTRACT_ADDRESS.save(deps.storage, &contract_address)?;
+            } else {
+                return Err(ContractError::InvalidCW20ContractAddress {});
+            }
+        }
+        _ => {}
+    }
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
@@ -96,9 +106,14 @@ pub fn execute(
         ExecuteMsg::SetLiquidationHealth { liquidation_health } => {
             execute_set_liquidation_health(deps, info, liquidation_health)
         }
+
         ExecuteMsg::SetMintableHealth { mintable_health } => {
             execute_set_mintable_health(deps, info, mintable_health)
         }
+
+        ExecuteMsg::SetCW20DiraContractAddress {
+            cw20_dira_contract_address,
+        } => execute_set_cw20_dira_contact_address(deps, cw20_dira_contract_address),
     }
 }
 
@@ -170,6 +185,19 @@ fn helper_calculate_max_unlockable_collateral(
     let unlockable_collateral = locked_collateral - required_collateral_for_minted_dira;
 
     unlockable_collateral
+}
+
+fn helper_is_cw20_contract(deps: Deps, contract_addr: &Addr) -> bool {
+    let query_msg = to_json_binary(&cw20::Cw20QueryMsg::TokenInfo {}).unwrap();
+    let query = QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: contract_addr.to_string(),
+        msg: query_msg,
+    });
+
+    match deps.querier.query::<TokenInfoResponse>(&query) {
+        Ok(_response) => true, // The contract supports CW20 TokenInfo query
+        Err(_) => false,       // Not a CW20 contract
+    }
 }
 
 // Function to lock collateral
@@ -514,6 +542,20 @@ fn execute_set_mintable_health(
         .add_attribute("action", "set_mintable_health")
         .add_attribute("sender", info.sender)
         .add_attribute("new_liquidation_health", mintable_health.to_string()))
+}
+
+fn execute_set_cw20_dira_contact_address(
+    deps: DepsMut,
+    cw20_dira_contract_address: Addr,
+) -> Result<Response, ContractError> {
+    if (helper_is_cw20_contract(deps.as_ref(), &cw20_dira_contract_address)) {
+        CW20_DIRA_CONTRACT_ADDRESS.save(deps.storage, &cw20_dira_contract_address)?;
+        return Ok(Response::new()
+            .add_attribute("action", "set_cw20_dira_contract_address")
+            .add_attribute("contract_address", cw20_dira_contract_address.into_string()));
+    } else {
+        return Err(ContractError::InvalidCW20ContractAddress {});
+    }
 }
 
 // Query function to get collateral prices

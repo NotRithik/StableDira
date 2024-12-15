@@ -1,4 +1,3 @@
-use bech32::{encode, Hrp};
 use cosmwasm_std::{coins, Addr, Decimal};
 use cw20::MinterResponse;
 use cw20_base::msg::{ExecuteMsg as Cw20ExecuteMsg, InstantiateMsg as Cw20InstantiateMsg};
@@ -26,8 +25,8 @@ fn cw20_contract() -> Box<dyn Contract<cosmwasm_std::Empty>> {
 }
 
 // Generate Bech32 Address:
-// dbg!(encode::<bech32::Bech32>(
-//     Hrp::parse("cosmwasm").unwrap(),
+// dbg!(bech32::encode::<bech32::Bech32>(
+//     bech32::Hrp::parse("cosmwasm").unwrap(),
 //     &[
 //         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14,
 //         0x15, 0x16, 0x17, 0x18, 0x12, 0x20
@@ -58,25 +57,6 @@ fn setup_app() -> (App, Addr, Addr, Addr, Addr) {
             .unwrap();
     });
 
-    // Store the Dira stablecoin contract code
-    let dira_code_id = app.store_code(dira_contract());
-
-    // Instantiate the Dira stablecoin contract
-    let dira_contract_addr = app
-        .instantiate_contract(
-            dira_code_id,
-            Addr::unchecked("cosmwasm1qypqxpq9qcrsszgszyfpx9q4zct3sxfqx5vwjh"), // Admin address
-            &DiraInstantiateMsg {
-                liquidation_health: Decimal::percent(110),
-                mintable_health: Decimal::percent(130),
-                collateral_token_denom: "uatom".to_string(),
-            },
-            &[],
-            "Dira Stablecoin",
-            None,
-        )
-        .unwrap();
-
     // Store the CW20 base contract code
     let cw20_code_id = app.store_code(cw20_contract());
 
@@ -98,6 +78,26 @@ fn setup_app() -> (App, Addr, Addr, Addr, Addr) {
             },
             &[],
             "CW20 Dira Token",
+            None,
+        )
+        .unwrap();
+
+    // Store the Dira stablecoin contract code
+    let dira_code_id = app.store_code(dira_contract());
+
+    // Instantiate the Dira stablecoin contract
+    let dira_contract_addr = app
+        .instantiate_contract(
+            dira_code_id,
+            Addr::unchecked("cosmwasm1qypqxpq9qcrsszgszyfpx9q4zct3sxfqx5vwjh"), // Admin address
+            &DiraInstantiateMsg {
+                liquidation_health: Decimal::percent(110),
+                mintable_health: Decimal::percent(130),
+                collateral_token_denom: "uatom".to_string(),
+                cw20_dira_contract_address: Some(cw20_contract_addr.clone()),
+            },
+            &[],
+            "Dira Stablecoin",
             None,
         )
         .unwrap();

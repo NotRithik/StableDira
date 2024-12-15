@@ -27,14 +27,18 @@ pub enum ContractError {
     #[error("Mintable Health cannot be set to be lower than Liquidation Health")]
     MintableHealthLowerThanLiquidationHealth {},
 
-    #[error("Collateral Price has not been set")]
+    #[error("Collateral price has not been set")]
     CollateralPriceNotSet {},
 
-    #[error("Cannot return more dira than minted")]
+    #[error("Cannot return more Dira than minted")]
     ReturningMoreDiraThanMinted {},
 
-    #[error("Invalid wallet address")]
+    #[error("Invalid Wallet Address")]
     InvalidWalletAddress {},
+
+    #[error("Invalid CW20 Contract Address")]
+    InvalidCW20ContractAddress {},
+    
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

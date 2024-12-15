@@ -12,6 +12,7 @@ pub struct InstantiateMsg {
     pub liquidation_health: Decimal,
     pub mintable_health: Decimal,
     pub collateral_token_denom: String,
+    pub cw20_dira_contract_address: Option<Addr>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -47,6 +48,10 @@ pub enum ExecuteMsg {
     },
     SetMintableHealth {
         mintable_health: Decimal,
+    },
+
+    SetCW20DiraContractAddress {
+        cw20_dira_contract_address: Addr,
     },
 }
 
