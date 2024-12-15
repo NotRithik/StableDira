@@ -1,5 +1,4 @@
 use core::panic;
-use std::convert::TryInto;
 
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
@@ -92,7 +91,7 @@ pub fn execute(
 
         ExecuteMsg::MintDira { dira_to_mint } => execute_mint_dira(deps, info, dira_to_mint),
         ExecuteMsg::RedeemDira { dira_to_redeem } => {
-            execute_return_dira(deps, info, dira_to_redeem)
+            execute_redeem_dira(deps, info, dira_to_redeem)
         }
 
         ExecuteMsg::LiquidateStablecoins {
@@ -356,24 +355,40 @@ fn execute_mint_dira(
     // Else, mint dira and transfer it to user, add that message to the response
     MINTED_DIRA.save(
         deps.storage,
-        info.sender,
+        info.sender.clone(),
         &(dira_to_mint + previously_minted_dira),
     )?;
 
-    // TODO: Mint cw20 dira and transfer it to user
-    panic!("TODO: Implement this function!");
+    // Get the CW20 contract address
+    let cw20_dira_contract_address = match CW20_DIRA_CONTRACT_ADDRESS.may_load(deps.storage) {
+        Ok(Some(contract_address)) => contract_address,
+        _ => return Err(ContractError::CW20DiraContractAddressNotSet {}),
+    };
+
+    // Mint CW20 tokens
+    let mint_msg = cw20::Cw20ExecuteMsg::Mint {
+        recipient: info.sender.to_string(),
+        amount: dira_to_mint.atomics(),
+    };
+
+    let mint_cw20_message = cosmwasm_std::WasmMsg::Execute {
+        contract_addr: cw20_dira_contract_address.to_string(),
+        msg: to_json_binary(&mint_msg)?,
+        funds: vec![],
+    };
 
     Ok(Response::new()
+        .add_message(mint_cw20_message)
         .add_attribute("action", "mint_dira")
-        .add_attribute("sender", info.sender)
+        .add_attribute("sender", info.sender.to_string())
         .add_attribute(
             "total_dira_minted_by_sender",
             (dira_to_mint + previously_minted_dira).to_string(),
         ))
 }
 
-// Function to return dira
-fn execute_return_dira(
+// Function to redeem dira for the original collateral
+fn execute_redeem_dira(
     deps: DepsMut,
     info: MessageInfo,
     dira_to_return: Decimal,
@@ -389,18 +404,33 @@ fn execute_return_dira(
 
     MINTED_DIRA.save(
         deps.storage,
-        info.sender,
+        info.sender.clone(),
         &(previously_minted_dira - dira_to_return),
     )?;
 
-    // TODO: Request approval if required, transfer cw20 dira from user and burn it
-    panic!("TODO: Implement this function!");
+    // Get the CW20 contract address
+    let cw20_dira_contract_address = match CW20_DIRA_CONTRACT_ADDRESS.may_load(deps.storage) {
+        Ok(Some(contract_address)) => contract_address,
+        _ => return Err(ContractError::CW20DiraContractAddressNotSet {}),
+    };
+
+    // Burn CW20 tokens
+    let burn_msg = cw20::Cw20ExecuteMsg::Burn {
+        amount: dira_to_return.atomics(),
+    };
+
+    let burn_cw20_message = cosmwasm_std::WasmMsg::Execute {
+        contract_addr: cw20_dira_contract_address.to_string(),
+        msg: to_json_binary(&burn_msg)?,
+        funds: vec![],
+    };
 
     Ok(Response::new()
-        .add_attribute("action", "burn_dira")
-        .add_attribute("sender", info.sender)
+        .add_message(burn_cw20_message)
+        .add_attribute("action", "redeem_dira")
+        .add_attribute("sender", info.sender.to_string())
         .add_attribute(
-            "total_dira_minted_by_sender",
+            "total_dira_remaining_by_sender",
             (previously_minted_dira - dira_to_return).to_string(),
         ))
 }
