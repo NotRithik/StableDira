@@ -351,7 +351,7 @@ fn execute_mint_dira(
     Ok(Response::new()
         .add_attribute("action", "mint_dira")
         .add_attribute("sender", info.sender)
-        .add_attribute("total_dira_minted_by_sender", dira_to_mint + previously_minted_dira))
+        .add_attribute("total_dira_minted_by_sender", (dira_to_mint + previously_minted_dira).to_string()))
 }
 
 // Function to return rupees
