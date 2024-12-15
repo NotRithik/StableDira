@@ -351,7 +351,10 @@ fn execute_mint_dira(
     Ok(Response::new()
         .add_attribute("action", "mint_dira")
         .add_attribute("sender", info.sender)
-        .add_attribute("total_dira_minted_by_sender", (dira_to_mint + previously_minted_dira).to_string()))
+        .add_attribute(
+            "total_dira_minted_by_sender",
+            (dira_to_mint + previously_minted_dira).to_string(),
+        ))
 }
 
 // Function to return rupees
@@ -360,7 +363,31 @@ fn execute_return_dira(
     info: MessageInfo,
     dira_to_return: Decimal,
 ) -> Result<Response, ContractError> {
+    let previously_minted_dira = match MINTED_DIRA.may_load(deps.storage, info.sender.clone()) {
+        Ok(Some(minted_dira)) => minted_dira,
+        _ => Decimal::zero(),
+    };
+
+    if dira_to_return > previously_minted_dira {
+        return Err(ContractError::ReturningMoreDiraThanMinted {});
+    }
+
+    MINTED_DIRA.save(
+        deps.storage,
+        info.sender,
+        &(previously_minted_dira - dira_to_return),
+    )?;
+
+    // TODO: Request approval if required, transfer cw20 dira from user and burn it
     panic!("TODO: Implement this function!");
+
+    Ok(Response::new()
+        .add_attribute("action", "burn_dira")
+        .add_attribute("sender", info.sender)
+        .add_attribute(
+            "total_dira_minted_by_sender",
+            (previously_minted_dira - dira_to_return).to_string(),
+        ))
 }
 
 // Function to liquidate stablecoins
