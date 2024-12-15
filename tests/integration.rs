@@ -1,21 +1,11 @@
 use cosmwasm_std::{coins, Decimal, Addr};
-use cw_multi_test::{App, AppBuilder, BankSudo, Contract, ContractWrapper, Executor};
+use cw_multi_test::{App, AppBuilder, Executor};
+use std::fs;
 use stable_dira::msg::{ExecuteMsg, InstantiateMsg};
 
-// Mock implementation for contract initialization
-fn dira_contract() -> Box<dyn Contract<cosmwasm_std::Empty>> {
-    let contract = ContractWrapper::new(
-        stable_dira::contract::execute,
-        stable_dira::contract::instantiate,
-        stable_dira::contract::query,
-    );
-    Box::new(contract)
-}
-
-// Helper to initialize the app and contract
 fn setup_app() -> (App, Addr, Addr, Addr) {
+    // Build the app and initialize balances
     let mut app = AppBuilder::new().build(|router, _, storage| {
-        // Initialize app state with some balances
         router
             .bank
             .init_balance(
@@ -29,14 +19,17 @@ fn setup_app() -> (App, Addr, Addr, Addr) {
             .bank
             .init_balance(
                 storage,
-                &Addr::unchecked("cosmos1nonadminxxxxxxxxxxxxxxxxxxx"),
+                &Addr::unchecked("cosmos1nonadminxxxxxxxxxxxxxxxxxxxx"),
                 coins(1_000_000_000, "uatom"),
             )
             .unwrap();
     });
 
+    // Read the Wasm binary from the artifacts folder
+    let wasm_binary = fs::read("../artifacts/stable_dira.wasm").unwrap();
+
     // Store the contract code
-    let code_id = app.store_code(dira_contract());
+    let code_id = app.store_code(wasm_binary);
 
     // Instantiate the contract
     let contract_addr = app
@@ -54,7 +47,6 @@ fn setup_app() -> (App, Addr, Addr, Addr) {
         )
         .unwrap();
 
-    // Return the app instance, contract address, and user addresses
     (
         app,
         contract_addr,

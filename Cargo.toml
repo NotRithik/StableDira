@@ -46,8 +46,6 @@ cosmwasm-schema = { version = "2.1.5" }
 
 [dev-dependencies]
 # STUFF BELOW IS REQUIRED ONLY FOR TEST BUILDS
-cosmwasm-vm = "2.1.5"
-getrandom = { version = "0.2.15", features = ["js"] }
 cw-multi-test = "2.2.0"
 cw-utils = "2.0.0"
 
