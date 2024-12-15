@@ -1,9 +1,11 @@
 use core::panic;
+use std::convert::TryInto;
 
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+    Uint128,
 };
 
 use cw2::set_contract_version;
@@ -188,6 +190,8 @@ fn execute_lock_collateral(deps: DepsMut, info: MessageInfo) -> Result<Response,
         .ok_or(ContractError::InsufficientFundsSent {})
         .unwrap();
 
+    dbg!(sent_funds.amount);
+
     let sent_amount = Decimal::from_atomics(sent_funds.amount, 6).unwrap();
 
     match LOCKED_COLLATERAL.update(
@@ -257,32 +261,17 @@ fn execute_unlock_collateral(
         });
     }
 
-    match LOCKED_COLLATERAL.update(
+    LOCKED_COLLATERAL.save(
         deps.storage,
         message_sender.clone(),
-        |balance: Option<Decimal>| -> Result<Decimal, ContractError> {
-            match balance {
-                Some(bal) => {
-                    if bal < collateral_amount {
-                        return Err(ContractError::InsufficientCollateral {});
-                    }
-                    Ok(bal - collateral_amount)
-                }
-                None => Err(ContractError::InsufficientCollateral {}),
-            }
-        },
-    ) {
-        Ok(_result) => {}
-        Err(error) => {
-            return Err(error);
-        }
-    }
+        &(locked_collateral - collateral_amount),
+    )?;
 
     let return_collateral_to_user_message = BankMsg::Send {
         to_address: message_sender.to_string(),
         amount: vec![Coin {
             denom: collateral_token_denom,
-            amount: collateral_amount.atomics(), // Assuming decimal representation
+            amount: collateral_amount.atomics() / Uint128::from(u128::pow(10, 12)),
         }],
     };
 
@@ -472,7 +461,10 @@ fn execute_set_collateral_price_in_dirham(
     Ok(Response::new()
         .add_attribute("action", "set_collateral_price_in_dirham")
         .add_attribute("sender", info.sender)
-        .add_attribute("new_collateral_price", collateral_price_in_dirham.to_string()))
+        .add_attribute(
+            "new_collateral_price",
+            collateral_price_in_dirham.to_string(),
+        ))
 }
 
 // Function to set liquidation health
@@ -487,10 +479,7 @@ fn execute_set_liquidation_health(
         return Err(ContractError::UnauthorizedUser {});
     }
 
-    LIQUIDATION_HEALTH.update(
-        deps.storage,
-        |_current_liquidation_health| -> Result<Decimal, ContractError> { Ok(liquidation_health) },
-    )?;
+    LIQUIDATION_HEALTH.save(deps.storage, &liquidation_health)?;
 
     Ok(Response::new()
         .add_attribute("action", "set_liquidation_health")

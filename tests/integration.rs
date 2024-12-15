@@ -1,178 +1,141 @@
-use std::borrow::BorrowMut;
-
-use cosmwasm_std::{coins, to_json_binary, ContractResult, Decimal, Env, Response};
-use cosmwasm_vm::{
-    call_execute, call_instantiate,
-    testing::{
-        mock_env, mock_info, mock_instance_with_gas_limit, MockApi, MockQuerier, MockStorage,
-    },
-    to_vec, Instance, VmResult,
-};
+use cosmwasm_std::{coins, Decimal, Addr};
+use cw_multi_test::{App, AppBuilder, BankSudo, Contract, ContractWrapper, Executor};
 
 use stable_dira::msg::{ExecuteMsg, InstantiateMsg};
 
-const WASM: &[u8] = include_bytes!("../artifacts/stable_dira.wasm");
+// Mock implementation for contract initialization
+fn dira_contract() -> Box<dyn Contract<cosmwasm_std::Empty>> {
+    let contract = ContractWrapper::new(
+        stable_dira::contract::execute,
+        stable_dira::contract::instantiate,
+        stable_dira::contract::query,
+    );
+    Box::new(contract)
+}
 
-/// Sets up a mock instance and instantiates the contract.
-/// Returns the initialized `Instance` and `Response`.
-fn setup_instance() -> (Instance<MockApi, MockStorage, MockQuerier>, Response, Env) {
-    let mut instance = mock_instance_with_gas_limit(WASM, 5_000_000_000_000_000);
-    let env = mock_env();
+// Helper to initialize the app and contract
+fn setup_app() -> (App, Addr) {
+    let mut app = AppBuilder::new().build(|router, _, storage| {
+        // Initialize app state, if needed
+        router
+            .bank
+            .init_balance(
+                storage,
+                &Addr::unchecked("creator"),
+                coins(1_000_000_000, "uatom"),
+            )
+            .unwrap();
+    });
 
-    let response = {
-        let info = mock_info("creator", &[]);
+    let code_id = app.store_code(dira_contract());
+    let contract_addr = app
+        .instantiate_contract(
+            code_id,
+            Addr::unchecked("creator"),
+            &InstantiateMsg {
+                liquidation_health: Decimal::percent(110),
+                mintable_health: Decimal::percent(130),
+                collateral_token_denom: "uatom".to_string(),
+            },
+            &[],
+            "Dira Stablecoin",
+            None,
+        )
+        .unwrap();
 
-        let msg = InstantiateMsg {
-            liquidation_health: Decimal::from_ratio(11u32, 10u32),
-            mintable_health: Decimal::from_ratio(13u32, 10u32), // Added mintable_health
-            collateral_token_denom: String::from("uatom"),
-        };
-
-        let msg_binary = &*to_vec(&msg).unwrap();
-
-        let res: VmResult<ContractResult<Response>> =
-            call_instantiate(instance.borrow_mut(), &env, &info, msg_binary);
-
-        assert!(res.is_ok());
-
-        res.unwrap().unwrap()
-    };
-
-    (instance, response, env)
+    (app, contract_addr)
 }
 
 #[test]
 fn test_setup_instance() {
-    _ = setup_instance();
+    let (_app, contract_addr) = setup_app();
+    assert!(!contract_addr.to_string().is_empty());
     dbg!("Successfully instantiated the contract!");
 }
 
 #[test]
 fn test_admin_functions() {
-    let (mut instance, _response, env) = setup_instance();
+    let (mut app, contract_addr) = setup_app();
 
-    let admin_info = mock_info("creator", &[]);
-    let non_admin_info = mock_info("non_admin", &[]);
+    // Admin and non-admin actors
+    let admin = Addr::unchecked("creator");
+    let non_admin = Addr::unchecked("non_admin");
 
-    // Test Set Collateral Price
-    let set_collateral_price_msg = ExecuteMsg::SetCollateralPriceInDirham {
+    // Test setting collateral price
+    let msg = ExecuteMsg::SetCollateralPriceInDirham {
         collateral_price_in_dirham: Decimal::from_ratio(3309u128, 100u128),
     };
-    let res: ContractResult<Response> = call_execute(
-        instance.borrow_mut(),
-        &env,
-        &admin_info,
-        &to_vec(&set_collateral_price_msg).unwrap(),
-    )
-    .unwrap();
-
+    let res = app.execute_contract(admin.clone(), contract_addr.clone(), &msg, &[]);
     assert!(res.is_ok());
 
-    let res: ContractResult<Response> = call_execute(
-        instance.borrow_mut(),
-        &env,
-        &non_admin_info,
-        &to_vec(&set_collateral_price_msg).unwrap(),
-    )
-    .unwrap();
-
+    let res = app.execute_contract(non_admin.clone(), contract_addr.clone(), &msg, &[]);
     assert!(res.is_err());
 
-    // Test Set Mintable Health
-    let set_mintable_health_msg = ExecuteMsg::SetMintableHealth {
+    // Test setting mintable health
+    let msg = ExecuteMsg::SetMintableHealth {
         mintable_health: Decimal::percent(195),
     };
-    let res: ContractResult<Response> = call_execute(
-        instance.borrow_mut(),
-        &env,
-        &admin_info,
-        &to_vec(&set_mintable_health_msg).unwrap(),
-    )
-    .unwrap();
+    let res = app.execute_contract(admin.clone(), contract_addr.clone(), &msg, &[]);
     assert!(res.is_ok());
 
-    let res: ContractResult<Response> = call_execute(
-        instance.borrow_mut(),
-        &env,
-        &non_admin_info,
-        &to_vec(&set_mintable_health_msg).unwrap(),
-    )
-    .unwrap();
-
+    let res = app.execute_contract(non_admin.clone(), contract_addr.clone(), &msg, &[]);
     assert!(res.is_err());
 
-    // Test Set Liquidation Health
-    let set_liquidation_health_msg = ExecuteMsg::SetLiquidationHealth {
+    // Test setting liquidation health
+    let msg = ExecuteMsg::SetLiquidationHealth {
         liquidation_health: Decimal::percent(85),
     };
-    let res: ContractResult<Response> = call_execute(
-        instance.borrow_mut(),
-        &env,
-        &admin_info,
-        &to_vec(&set_liquidation_health_msg).unwrap(),
-    )
-    .unwrap();
-
+    let res = app.execute_contract(admin.clone(), contract_addr.clone(), &msg, &[]);
     assert!(res.is_ok());
 
-    let res: ContractResult<Response> = call_execute(
-        instance.borrow_mut(),
-        &env,
-        &non_admin_info,
-        &to_vec(&set_liquidation_health_msg).unwrap(),
-    )
-    .unwrap();
-
+    let res = app.execute_contract(non_admin.clone(), contract_addr.clone(), &msg, &[]);
     assert!(res.is_err());
 }
 
 #[test]
 fn test_lock_unlock_collateral() {
-    let (mut instance, _response, env) = setup_instance();
+    let (mut app, contract_addr) = setup_app();
 
-    let set_collateral_price_msg = ExecuteMsg::SetCollateralPriceInDirham {
+    // Set collateral price
+    let msg = ExecuteMsg::SetCollateralPriceInDirham {
         collateral_price_in_dirham: Decimal::from_ratio(3309u128, 100u128),
     };
-    let res: ContractResult<Response> = call_execute(
-        instance.borrow_mut(),
-        &env,
-        &mock_info("creator", &[]),
-        &to_vec(&set_collateral_price_msg).unwrap(),
-    )
-    .unwrap();
-
+    let res = app.execute_contract(Addr::unchecked("creator"), contract_addr.clone(), &msg, &[]);
     assert!(res.is_ok());
 
-    let msg_to_execute = ExecuteMsg::LockCollateral {};
-
-    let msg_binary = &*to_json_binary(&msg_to_execute).unwrap();
-
-    let info = mock_info("creator", &coins(1204, "uatom"));
-    let res: ContractResult<Response> =
-        call_execute(instance.borrow_mut(), &env, &info, msg_binary).unwrap();
-
+    // Lock collateral
+    let msg = ExecuteMsg::LockCollateral {};
+    let res = app.execute_contract(
+        Addr::unchecked("creator"),
+        contract_addr.clone(),
+        &msg,
+        &coins(1204, "uatom"),
+    );
     assert!(res.is_ok());
 
-    let unlock_msg_to_execute = ExecuteMsg::UnlockCollateral {
+    // Unlock collateral
+    let msg = ExecuteMsg::UnlockCollateral {
         collateral_amount_to_unlock: Decimal::from_atomics(1204u128, 6).unwrap(),
     };
-
-    let msg_binary = &*to_json_binary(&unlock_msg_to_execute).unwrap();
-    let info = mock_info("creator", &[]); // No funds sent for unlock operation
-    let res: ContractResult<Response> =
-        call_execute(instance.borrow_mut(), &env, &info, msg_binary).unwrap();
-
+    let res = app.execute_contract(
+        Addr::unchecked("creator"),
+        contract_addr.clone(),
+        &msg,
+        &[], // No funds sent for unlock
+    );
+    dbg!(&res);
     assert!(res.is_ok());
 
-    let unlock_msg_to_execute = ExecuteMsg::UnlockCollateral {
-        collateral_amount_to_unlock: Decimal::from_atomics(1204u128, 6).unwrap(),
+    // Attempt to unlock too much collateral (should fail)
+    let msg = ExecuteMsg::UnlockCollateral {
+        collateral_amount_to_unlock: Decimal::from_atomics(1500u128, 6).unwrap(),
     };
-
-    let msg_binary = &*to_json_binary(&unlock_msg_to_execute).unwrap();
-    let info = mock_info("creator", &[]); // No funds sent for unlock operation
-    let res: ContractResult<Response> =
-        call_execute(instance.borrow_mut(), &env, &info, msg_binary).unwrap();
-
+    let res = app.execute_contract(
+        Addr::unchecked("creator"),
+        contract_addr.clone(),
+        &msg,
+        &[], // No funds sent for unlock
+    );
     assert!(res.is_err());
 
     dbg!("Successfully locked and unlocked collateral!");
