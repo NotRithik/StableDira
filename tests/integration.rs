@@ -269,6 +269,21 @@ fn test_mint_burn_dira() {
     assert_eq!(balance.balance, Uint128::new(1_000));
     dbg!("Admin's balance of DIRA:", balance.balance);
 
+    let increase_allowance_msg = Cw20ExecuteMsg::IncreaseAllowance {
+        spender: dira_contract_addr.to_string(),
+        amount: Uint128::from(500u128), // Approve 500 DIRA tokens
+        expires: None, // No expiration
+    };
+
+    let res = app.execute_contract(
+        admin.clone(),              // The user granting the approval
+        cw20_contract_addr.clone(), // The CW20 token contract
+        &increase_allowance_msg,   // The IncreaseAllowance message
+        &[],                       // No funds required
+    );
+    assert!(res.is_ok());
+    dbg!("Successfully granted allowance to Dira contract!");
+
     // Burn DIRA from admin
     let burn_dira_msg = DiraExecuteMsg::BurnDira {
         dira_to_burn: Decimal::from_atomics(500u128, 6).unwrap(),
@@ -314,6 +329,21 @@ fn test_mint_burn_dira() {
         .unwrap();
     assert_eq!(balance.balance, Uint128::new(500));
     dbg!("Non-admin's balance of DIRA:", balance.balance);
+
+    let increase_allowance_msg = Cw20ExecuteMsg::IncreaseAllowance {
+        spender: dira_contract_addr.to_string(),
+        amount: Uint128::from(250u128), // Approve 500 DIRA tokens
+        expires: None, // No expiration
+    };
+
+    let res = app.execute_contract(
+        non_admin.clone(),              // The user granting the approval
+        cw20_contract_addr.clone(), // The CW20 token contract
+        &increase_allowance_msg,   // The IncreaseAllowance message
+        &[],                       // No funds required
+    );
+    assert!(res.is_ok());
+    dbg!("Successfully granted allowance to Dira contract!");
 
     // Burn DIRA from non-admin
     let burn_dira_msg = DiraExecuteMsg::BurnDira {
