@@ -4,7 +4,7 @@ use core::panic;
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_json_binary, Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env, MessageInfo,
-    QueryRequest, Response, StdResult, Uint128, WasmQuery,
+    QueryRequest, Response, StdError, StdResult, Uint128, WasmQuery,
 };
 
 use cw2::set_contract_version;
@@ -90,9 +90,7 @@ pub fn execute(
         } => execute_unlock_collateral(deps, info, collateral_amount_to_unlock),
 
         ExecuteMsg::MintDira { dira_to_mint } => execute_mint_dira(deps, info, dira_to_mint),
-        ExecuteMsg::BurnDira { dira_to_burn } => {
-            execute_burn_dira(deps, info, dira_to_burn)
-        }
+        ExecuteMsg::BurnDira { dira_to_burn } => execute_burn_dira(deps, info, dira_to_burn),
 
         ExecuteMsg::LiquidateStablecoins {
             wallet_address_to_liquidate,
@@ -146,11 +144,11 @@ fn helper_calculate_stablecoin_health(
     let locked_collateral_value_in_dirham = collateral_price_in_dirham * locked_collateral;
 
     if minted_dira.is_zero() {
-        if !locked_collateral_value_in_dirham.is_zero() {
-            return Decimal::zero();
-        } else {
-            return Decimal::MAX;
-        }
+        // if !locked_collateral_value_in_dirham.is_zero() {
+        //     return Decimal::zero();
+        // } else {
+        return Decimal::MAX;
+        // }
     }
 
     return locked_collateral_value_in_dirham / minted_dira;
@@ -442,57 +440,74 @@ fn execute_liquidate_stablecoin_minter(
     info: MessageInfo,
     wallet_address_to_liquidate: Addr,
 ) -> Result<Response, ContractError> {
-    //TODO: Add reward for liquidating someone else
+    // Validate the wallet address
+    deps.api
+        .addr_validate(wallet_address_to_liquidate.as_str())
+        .map_err(|_| ContractError::InvalidWalletAddress {})?;
 
-    match deps.api.addr_validate(wallet_address_to_liquidate.as_str()) {
-        Ok(_) => {}
-        Err(_) => return Err(ContractError::InvalidWalletAddress {}),
-    };
-
+    // Load relevant data for liquidation
     let dira_minted_by_wallet_to_liquidate = MINTED_DIRA
         .load(deps.storage, wallet_address_to_liquidate.clone())
         .unwrap_or_default();
 
-    let collateral_price_in_dirham = COLLATERAL_TOKEN_PRICE.load(deps.storage).unwrap();
+    let collateral_price_in_dirham = COLLATERAL_TOKEN_PRICE
+        .load(deps.storage)
+        .map_err(|_| ContractError::CollateralPriceNotSet {})?;
 
     let collateral_locked_by_user_to_liquidate = LOCKED_COLLATERAL
         .load(deps.storage, wallet_address_to_liquidate.clone())
         .unwrap_or_default();
 
-    let liquidation_health = LIQUIDATION_HEALTH.load(deps.storage).unwrap();
+    let liquidation_health = LIQUIDATION_HEALTH.load(deps.storage)?;
 
-    if helper_calculate_stablecoin_health(
+    // Calculate health
+    let user_health = helper_calculate_stablecoin_health(
         dira_minted_by_wallet_to_liquidate,
         collateral_locked_by_user_to_liquidate,
         collateral_price_in_dirham,
-    ) < liquidation_health
-    {
-        LOCKED_COLLATERAL.save(
-            deps.storage,
-            wallet_address_to_liquidate.clone(),
-            &Decimal::zero(),
-        )?;
+    );
 
-        return Ok(Response::new()
-            .add_attribute("action", "liquidate_stablecoins")
-            .add_attribute("liquidation_attempt_succeeded", "true")
-            .add_attribute("liquidated_wallet", wallet_address_to_liquidate.to_string())
-            .add_attribute(
-                "liquidated_value",
-                collateral_locked_by_user_to_liquidate.to_string(),
-            )
-            .add_attribute("initiator", info.sender.to_string())
-            .add_attribute("liquidator_reward_paid", "0"));
-        // TODO: Enter liquidator reward paid when adding that functionality
-    } else {
-        return Ok(Response::new()
-            .add_attribute("action", "liquidate_stablecoins")
-            .add_attribute("liquidation_attempt_succeeded", "false")
-            .add_attribute("liquidated_wallet", wallet_address_to_liquidate.to_string())
-            .add_attribute("liquidated_value", Decimal::zero().to_string())
-            .add_attribute("initiator", info.sender.to_string())
-            .add_attribute("liquidator_reward_paid", "0"));
+    dbg!(format!(
+        "user health {} and liquidation health {}",
+        user_health, liquidation_health
+    ));
+
+    // Check if the user is liquidatable
+    if user_health >= liquidation_health {
+        return Err(ContractError::TooHealthyToLiquidate {
+            wallet_address: wallet_address_to_liquidate,
+        });
     }
+
+    // Liquidate: Reset the collateral to zero
+    LOCKED_COLLATERAL.save(
+        deps.storage,
+        wallet_address_to_liquidate.clone(),
+        &Decimal::zero(),
+    )?;
+
+    let mut liquidated_dira = Decimal::zero();
+    MINTED_DIRA.update(
+        deps.storage,
+        wallet_address_to_liquidate.clone(),
+        |minted_dira| {
+            liquidated_dira = minted_dira.unwrap_or_default();
+            Ok::<Decimal, StdError>(Decimal::zero())
+        },
+    )?;
+
+    // Return a successful response
+    Ok(Response::new()
+        .add_attribute("action", "liquidate_stablecoins")
+        .add_attribute("liquidated_wallet", wallet_address_to_liquidate.to_string())
+        .add_attribute(
+            "liquidated_collateral",
+            collateral_locked_by_user_to_liquidate.to_string(),
+        )
+        .add_attribute("liquidated_dira", liquidated_dira.to_string())
+        .add_attribute("initiator", info.sender.to_string())
+        .add_attribute("liquidator_reward_paid", "0"))
+    // TODO: Update liquidator reward logic here
 }
 
 // Function to set collateral prices in dirham

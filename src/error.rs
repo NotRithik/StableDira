@@ -42,6 +42,9 @@ pub enum ContractError {
     #[error("CW20 Dira Contract Address not set")]
     CW20DiraContractAddressNotSet {},
 
+    #[error("{wallet_address}'s Dira are too healthy to liquidate")]
+    TooHealthyToLiquidate{ wallet_address: cosmwasm_std::Addr }
+
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

@@ -91,8 +91,8 @@ fn setup_app() -> (App, Addr, Addr, Addr, Addr) {
             dira_code_id,
             Addr::unchecked("cosmwasm1qypqxpq9qcrsszgszyfpx9q4zct3sxfqx5vwjh"), // Admin address
             &DiraInstantiateMsg {
-                liquidation_health: Decimal::percent(110),
-                mintable_health: Decimal::percent(130),
+                liquidation_health: Decimal::from_ratio(110u128, 100u128),
+                mintable_health: Decimal::from_ratio(130u128, 100u128),
                 collateral_token_denom: "uatom".to_string(),
                 cw20_dira_contract_address: Some(cw20_contract_addr.clone()),
             },
@@ -101,6 +101,19 @@ fn setup_app() -> (App, Addr, Addr, Addr, Addr) {
             None,
         )
         .unwrap();
+
+    // Update the CW20 token's minter to the Dira contract
+    let update_minter_msg = Cw20ExecuteMsg::UpdateMinter {
+        new_minter: Some(dira_contract_addr.to_string()),
+    };
+    let res = app.execute_contract(
+        Addr::unchecked("cosmwasm1qypqxpq9qcrsszgszyfpx9q4zct3sxfqx5vwjh"),
+        cw20_contract_addr.clone(),
+        &update_minter_msg,
+        &[],
+    );
+    assert!(res.is_ok());
+    dbg!("Updated CW20 token minter to Dira contract");
 
     // Return the app instance, both contract addresses, and user addresses
     (
@@ -197,19 +210,6 @@ fn test_lock_unlock_collateral() {
 fn test_mint_burn_dira() {
     let (mut app, dira_contract_addr, cw20_contract_addr, admin, non_admin) = setup_app();
 
-    // Update the CW20 token's minter to the Dira contract
-    let update_minter_msg = Cw20ExecuteMsg::UpdateMinter {
-        new_minter: Some(dira_contract_addr.to_string()),
-    };
-    let res = app.execute_contract(
-        admin.clone(),
-        cw20_contract_addr.clone(),
-        &update_minter_msg,
-        &[],
-    );
-    assert!(res.is_ok());
-    dbg!("Updated CW20 token minter to Dira contract");
-
     // Lock collateral from the admin user
     let set_collateral_price_msg = DiraExecuteMsg::SetCollateralPriceInDirham {
         collateral_price_in_dirham: Decimal::from_ratio(3309u128, 100u128),
@@ -272,14 +272,14 @@ fn test_mint_burn_dira() {
     let increase_allowance_msg = Cw20ExecuteMsg::IncreaseAllowance {
         spender: dira_contract_addr.to_string(),
         amount: Uint128::from(500u128), // Approve 500 DIRA tokens
-        expires: None, // No expiration
+        expires: None,                  // No expiration
     };
 
     let res = app.execute_contract(
         admin.clone(),              // The user granting the approval
         cw20_contract_addr.clone(), // The CW20 token contract
-        &increase_allowance_msg,   // The IncreaseAllowance message
-        &[],                       // No funds required
+        &increase_allowance_msg,    // The IncreaseAllowance message
+        &[],                        // No funds required
     );
     assert!(res.is_ok());
     dbg!("Successfully granted allowance to Dira contract!");
@@ -333,14 +333,14 @@ fn test_mint_burn_dira() {
     let increase_allowance_msg = Cw20ExecuteMsg::IncreaseAllowance {
         spender: dira_contract_addr.to_string(),
         amount: Uint128::from(250u128), // Approve 500 DIRA tokens
-        expires: None, // No expiration
+        expires: None,                  // No expiration
     };
 
     let res = app.execute_contract(
-        non_admin.clone(),              // The user granting the approval
+        non_admin.clone(),          // The user granting the approval
         cw20_contract_addr.clone(), // The CW20 token contract
-        &increase_allowance_msg,   // The IncreaseAllowance message
-        &[],                       // No funds required
+        &increase_allowance_msg,    // The IncreaseAllowance message
+        &[],                        // No funds required
     );
     assert!(res.is_ok());
     dbg!("Successfully granted allowance to Dira contract!");
@@ -364,5 +364,182 @@ fn test_mint_burn_dira() {
         .query_wasm_smart(cw20_contract_addr.clone(), &non_admin_balance_query)
         .unwrap();
     assert_eq!(balance.balance, Uint128::new(250));
-    dbg!("Non-admin's balance of DIRA after burning:", balance.balance);
+    dbg!(
+        "Non-admin's balance of DIRA after burning:",
+        balance.balance
+    );
+}
+
+#[test]
+fn test_liquidate_collateral() {
+    let (mut app, dira_contract_addr, _cw20_contract_addr, admin, user) = setup_app();
+
+    // 1. Setup the environment
+    // Step 1.1: Set collateral price
+    let set_collateral_price_msg = DiraExecuteMsg::SetCollateralPriceInDirham {
+        collateral_price_in_dirham: Decimal::from_ratio(3309u128, 100u128), // 33.09
+    };
+    let res = app.execute_contract(
+        admin.clone(),
+        dira_contract_addr.clone(),
+        &set_collateral_price_msg,
+        &[],
+    );
+    assert!(res.is_ok());
+    dbg!("Set collateral price to 33.09");
+
+    // Step 1.2: Lock collateral from both admin and user
+    let lock_collateral_msg = DiraExecuteMsg::LockCollateral {};
+
+    let res = app.execute_contract(
+        admin.clone(),
+        dira_contract_addr.clone(),
+        &lock_collateral_msg,
+        &coins(1_000_000, "uatom"), // Admin locks 1 atom
+    );
+    assert!(res.is_ok());
+    dbg!("Locked 1 atom collateral from admin");
+
+    let res = app.execute_contract(
+        user.clone(),
+        dira_contract_addr.clone(),
+        &lock_collateral_msg,
+        &coins(1_000_000, "uatom"), // User locks 1 atom
+    );
+    assert!(res.is_ok());
+    dbg!("Locked 1 atom collateral from user");
+
+    // Step 1.3: Mint DIRA for both users
+    let mint_dira_msg = DiraExecuteMsg::MintDira {
+        dira_to_mint: Decimal::from_ratio(1000000u128, 100000u128),
+    };
+
+    let res = app.execute_contract(
+        admin.clone(),
+        dira_contract_addr.clone(),
+        &mint_dira_msg,
+        &[],
+    );
+    dbg!(&res);
+    assert!(res.is_ok());
+    dbg!("Admin minted 1 DIRA");
+
+    let res = app.execute_contract(
+        user.clone(),
+        dira_contract_addr.clone(),
+        &mint_dira_msg,
+        &[],
+    );
+    assert!(res.is_ok());
+    dbg!("User minted 1 DIRA");
+
+    // Step 1.4: Verify state before price drop
+    dbg!("State before price drop:");
+    dbg!(app.wrap().query_balance(&admin, "uatom").unwrap());
+    dbg!(app.wrap().query_balance(&user, "uatom").unwrap());
+
+    // 2. Test liquidation due to price drop
+    // Step 2.1: Drop collateral price
+    let set_low_collateral_price_msg = DiraExecuteMsg::SetCollateralPriceInDirham {
+        collateral_price_in_dirham: Decimal::from_ratio(1000u128, 100u128), // Price drops to 10.00
+    };
+    let res = app.execute_contract(
+        admin.clone(),
+        dira_contract_addr.clone(),
+        &set_low_collateral_price_msg,
+        &[],
+    );
+    assert!(res.is_ok());
+    dbg!("Collateral price dropped to 10.00");
+
+    // Step 2.2: Attempt to liquidate admin from user account
+    let liquidate_admin_msg = DiraExecuteMsg::LiquidateStablecoins {
+        wallet_address_to_liquidate: admin.clone(),
+    };
+    let res = app.execute_contract(
+        user.clone(),
+        dira_contract_addr.clone(),
+        &liquidate_admin_msg,
+        &[],
+    );
+    dbg!(&res);
+    assert!(res.is_ok());
+    dbg!("Admin successfully liquidated by user");
+
+    // Step 2.3: Verify state after admin liquidation
+    dbg!("State after admin liquidation:");
+    dbg!(app.wrap().query_balance(&admin, "uatom").unwrap());
+    dbg!(app.wrap().query_balance(&user, "uatom").unwrap());
+
+    // 3. Test liquidation of user from admin account
+    // Step 3.1: Drop collateral price further
+    let set_lower_collateral_price_msg = DiraExecuteMsg::SetCollateralPriceInDirham {
+        collateral_price_in_dirham: Decimal::from_ratio(500u128, 100u128), // Price drops to 5.00
+    };
+    let res = app.execute_contract(
+        admin.clone(),
+        dira_contract_addr.clone(),
+        &set_lower_collateral_price_msg,
+        &[],
+    );
+    assert!(res.is_ok());
+    dbg!("Collateral price dropped to 5.00");
+
+    // Step 3.2: Attempt to liquidate user from admin account
+    let liquidate_user_msg = DiraExecuteMsg::LiquidateStablecoins {
+        wallet_address_to_liquidate: user.clone(),
+    };
+    let res = app.execute_contract(
+        admin.clone(),
+        dira_contract_addr.clone(),
+        &liquidate_user_msg,
+        &[],
+    );
+    assert!(res.is_ok());
+    dbg!("User successfully liquidated by admin");
+
+    // Step 3.3: Verify state after user liquidation
+    dbg!("State after user liquidation:");
+    dbg!(app.wrap().query_balance(&admin, "uatom").unwrap());
+    dbg!(app.wrap().query_balance(&user, "uatom").unwrap());
+
+    // 4. Edge Case: Attempt liquidation when health is above threshold
+    let invalid_liquidation_msg = DiraExecuteMsg::LiquidateStablecoins {
+        wallet_address_to_liquidate: admin.clone(),
+    };
+    let res = app.execute_contract(
+        user.clone(),
+        dira_contract_addr.clone(),
+        &invalid_liquidation_msg,
+        &[],
+    );
+    dbg!(&res);
+    assert!(res.is_err());
+    dbg!("Liquidation failed as admin's health is above threshold");
+
+    // 5. Edge Case: Liquidation of a wallet with no minted DIRA
+    let invalid_liquidation_msg = DiraExecuteMsg::LiquidateStablecoins {
+        wallet_address_to_liquidate: Addr::unchecked("cosmos1no_minterxxxxxxxxxxxxxx"),
+    };
+    let res = app.execute_contract(
+        admin.clone(),
+        dira_contract_addr.clone(),
+        &invalid_liquidation_msg,
+        &[],
+    );
+    assert!(res.is_err());
+    dbg!("Liquidation failed for wallet with no minted DIRA");
+
+    // 6. Edge Case: Liquidation attempt on a non-existing user
+    let non_existing_user_msg = DiraExecuteMsg::LiquidateStablecoins {
+        wallet_address_to_liquidate: Addr::unchecked("cosmos1nonexistentxxxxxxxxxxx"),
+    };
+    let res = app.execute_contract(
+        admin.clone(),
+        dira_contract_addr.clone(),
+        &non_existing_user_msg,
+        &[],
+    );
+    assert!(res.is_err());
+    dbg!("Liquidation failed for non-existing user");
 }
