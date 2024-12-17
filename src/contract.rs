@@ -213,8 +213,6 @@ fn execute_lock_collateral(deps: DepsMut, info: MessageInfo) -> Result<Response,
         .ok_or(ContractError::InsufficientFundsSent {})
         .unwrap();
 
-    dbg!(sent_funds.amount);
-
     let sent_amount = Decimal::from_atomics(sent_funds.amount, 6).unwrap();
 
     match LOCKED_COLLATERAL.update(
@@ -466,12 +464,7 @@ fn execute_liquidate_stablecoin_minter(
         collateral_locked_by_user_to_liquidate,
         collateral_price_in_dirham,
     );
-
-    dbg!(format!(
-        "user health {} and liquidation health {}",
-        user_health, liquidation_health
-    ));
-
+    
     // Check if the user is liquidatable
     if user_health >= liquidation_health {
         return Err(ContractError::TooHealthyToLiquidate {

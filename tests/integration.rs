@@ -294,7 +294,6 @@ fn test_mint_burn_dira() {
         &burn_dira_msg,
         &[],
     );
-    dbg!(&res);
     assert!(res.is_ok());
     dbg!("Burnt 500 DIRA from admin");
 
@@ -420,7 +419,6 @@ fn test_liquidate_collateral() {
         &mint_dira_msg,
         &[],
     );
-    dbg!(&res);
     assert!(res.is_ok());
     dbg!("Admin minted 1 DIRA");
 
@@ -432,11 +430,6 @@ fn test_liquidate_collateral() {
     );
     assert!(res.is_ok());
     dbg!("User minted 1 DIRA");
-
-    // Step 1.4: Verify state before price drop
-    dbg!("State before price drop:");
-    dbg!(app.wrap().query_balance(&admin, "uatom").unwrap());
-    dbg!(app.wrap().query_balance(&user, "uatom").unwrap());
 
     // 2. Test liquidation due to price drop
     // Step 2.1: Drop collateral price
@@ -462,14 +455,8 @@ fn test_liquidate_collateral() {
         &liquidate_admin_msg,
         &[],
     );
-    dbg!(&res);
     assert!(res.is_ok());
     dbg!("Admin successfully liquidated by user");
-
-    // Step 2.3: Verify state after admin liquidation
-    dbg!("State after admin liquidation:");
-    dbg!(app.wrap().query_balance(&admin, "uatom").unwrap());
-    dbg!(app.wrap().query_balance(&user, "uatom").unwrap());
 
     // 3. Test liquidation of user from admin account
     // Step 3.1: Drop collateral price further
@@ -498,11 +485,6 @@ fn test_liquidate_collateral() {
     assert!(res.is_ok());
     dbg!("User successfully liquidated by admin");
 
-    // Step 3.3: Verify state after user liquidation
-    dbg!("State after user liquidation:");
-    dbg!(app.wrap().query_balance(&admin, "uatom").unwrap());
-    dbg!(app.wrap().query_balance(&user, "uatom").unwrap());
-
     // 4. Edge Case: Attempt liquidation when health is above threshold
     let invalid_liquidation_msg = DiraExecuteMsg::LiquidateStablecoins {
         wallet_address_to_liquidate: admin.clone(),
@@ -513,7 +495,6 @@ fn test_liquidate_collateral() {
         &invalid_liquidation_msg,
         &[],
     );
-    dbg!(&res);
     assert!(res.is_err());
     dbg!("Liquidation failed as admin's health is above threshold");
 
