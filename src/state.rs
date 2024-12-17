@@ -22,7 +22,6 @@ pub const MINTABLE_HEALTH: cw_storage_plus::Item<Decimal> =
 pub const LOCKED_COLLATERAL: cw_storage_plus::Map<Addr, Decimal> =
     cw_storage_plus::Map::new("locked-collaterals");
 
-
 // Track dira minted by each wallet
 pub const MINTED_DIRA: cw_storage_plus::Map<Addr, Decimal> =
     cw_storage_plus::Map::new("minted-dira");

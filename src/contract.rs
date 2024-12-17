@@ -11,7 +11,12 @@ use cw2::set_contract_version;
 use cw20::TokenInfoResponse;
 
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{
+    AdminAddressesResponse, CW20DiraContractAddressResponse, CollateralPriceResponse,
+    CollateralResponse, CollateralTokenDenomResponse, ExecuteMsg, InstantiateMsg,
+    LiquidationHealthResponse, MintableHealthResponse, MintedDiraResponse, QueryMsg,
+    StablecoinHealthResponse,
+};
 use crate::state::{
     ADMIN_ADDRESSES, COLLATERAL_TOKEN_DENOM, COLLATERAL_TOKEN_PRICE, CW20_DIRA_CONTRACT_ADDRESS,
     LIQUIDATION_HEALTH, LOCKED_COLLATERAL, MINTABLE_HEALTH, MINTED_DIRA,
@@ -117,15 +122,21 @@ pub fn execute(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::QueryCollateralPrice {} => query_collateral_price(&deps),
-
         QueryMsg::QueryLockedCollateral {
             wallet_address_to_query,
-        } => query_locked_collateral(&deps, wallet_address_to_query),
-
+        } => query_locked_collateral(deps, wallet_address_to_query),
+        QueryMsg::QueryMintedDira {
+            wallet_address_to_query,
+        } => query_minted_dira(deps, wallet_address_to_query),
         QueryMsg::QueryStablecoinHealth {
             stablecoin_minter_address_to_query,
-        } => query_stablecoin_health(&deps, stablecoin_minter_address_to_query),
+        } => query_stablecoin_health(deps, stablecoin_minter_address_to_query),
+        QueryMsg::QueryCollateralPrice {} => query_collateral_price(deps),
+        QueryMsg::QueryLiquidationHealth {} => query_liquidation_health(deps),
+        QueryMsg::QueryMintableHealth {} => query_mintable_health(deps),
+        QueryMsg::QueryAdminAddresses {} => query_admin_addresses(deps),
+        QueryMsg::QueryCollateralTokenDenom {} => query_collateral_token_denom(deps),
+        QueryMsg::QueryCW20DiraContractAddress {} => query_cw20_dira_contract_address(deps),
     }
 }
 
@@ -464,7 +475,7 @@ fn execute_liquidate_stablecoin_minter(
         collateral_locked_by_user_to_liquidate,
         collateral_price_in_dirham,
     );
-    
+
     // Check if the user is liquidatable
     if user_health >= liquidation_health {
         return Err(ContractError::TooHealthyToLiquidate {
@@ -597,20 +608,93 @@ fn execute_set_cw20_dira_contact_address(
     }
 }
 
-// Query function to get collateral prices
-fn query_collateral_price(deps: &Deps) -> StdResult<Binary> {
-    panic!("TODO: Implement this function!");
+/// Query the price of the collateral in dirham
+fn query_collateral_price(deps: Deps) -> StdResult<Binary> {
+    let collateral_price = COLLATERAL_TOKEN_PRICE
+        .may_load(deps.storage)?
+        .ok_or_else(|| StdError::not_found("collateral_price"))?;
+
+    let response = CollateralPriceResponse { collateral_price };
+
+    to_json_binary(&response)
 }
 
-// Query function to get locked collateral
-fn query_locked_collateral(deps: &Deps, collateral_address_to_query: Addr) -> StdResult<Binary> {
-    panic!("TODO: Implement this function!");
+/// Query the locked collateral of a given wallet address.
+fn query_locked_collateral(deps: Deps, wallet_address_to_query: Addr) -> StdResult<Binary> {
+    let locked_collateral = LOCKED_COLLATERAL
+        .may_load(deps.storage, wallet_address_to_query.clone())?
+        .unwrap_or_default();
+
+    to_json_binary(&CollateralResponse {
+        collateral_locked: locked_collateral,
+    })
 }
 
-// Query function to get stablecoin health
+/// Query the amount of DIRA minted by a given wallet address.
+fn query_minted_dira(deps: Deps, wallet_address_to_query: Addr) -> StdResult<Binary> {
+    let dira_minted = MINTED_DIRA
+        .may_load(deps.storage, wallet_address_to_query.clone())?
+        .unwrap_or_default();
+
+    to_json_binary(&MintedDiraResponse { dira_minted })
+}
+
+/// Query the stablecoin health of a specific minter.
 fn query_stablecoin_health(
-    deps: &Deps,
+    deps: Deps,
     stablecoin_minter_address_to_query: Addr,
 ) -> StdResult<Binary> {
-    panic!("TODO: Implement this function!");
+    let locked_collateral = LOCKED_COLLATERAL
+        .may_load(deps.storage, stablecoin_minter_address_to_query.clone())?
+        .unwrap_or_default();
+
+    let minted_dira = MINTED_DIRA
+        .may_load(deps.storage, stablecoin_minter_address_to_query.clone())?
+        .unwrap_or_default();
+
+    let collateral_price = COLLATERAL_TOKEN_PRICE.load(deps.storage)?;
+
+    let health =
+        helper_calculate_stablecoin_health(minted_dira, locked_collateral, collateral_price);
+
+    to_json_binary(&StablecoinHealthResponse { health })
+}
+
+/// Query the current liquidation health threshold.
+fn query_liquidation_health(deps: Deps) -> StdResult<Binary> {
+    let liquidation_health = LIQUIDATION_HEALTH.load(deps.storage)?;
+
+    to_json_binary(&LiquidationHealthResponse { liquidation_health })
+}
+
+/// Query the current mintable health threshold.
+fn query_mintable_health(deps: Deps) -> StdResult<Binary> {
+    let mintable_health = MINTABLE_HEALTH.load(deps.storage)?;
+
+    to_json_binary(&MintableHealthResponse { mintable_health })
+}
+
+/// Query the list of admin addresses.
+fn query_admin_addresses(deps: Deps) -> StdResult<Binary> {
+    let admin_addresses = ADMIN_ADDRESSES.load(deps.storage)?;
+
+    to_json_binary(&AdminAddressesResponse { admin_addresses })
+}
+
+/// Query the collateral token denom allowed by the contract.
+fn query_collateral_token_denom(deps: Deps) -> StdResult<Binary> {
+    let collateral_token_denom = COLLATERAL_TOKEN_DENOM.load(deps.storage)?;
+
+    to_json_binary(&CollateralTokenDenomResponse {
+        collateral_token_denom,
+    })
+}
+
+/// Query the CW20 DIRA contract address set in the contract.
+fn query_cw20_dira_contract_address(deps: Deps) -> StdResult<Binary> {
+    let cw20_dira_contract_address = CW20_DIRA_CONTRACT_ADDRESS.may_load(deps.storage)?.clone();
+
+    to_json_binary(&CW20DiraContractAddressResponse {
+        cw20_dira_contract_address,
+    })
 }
