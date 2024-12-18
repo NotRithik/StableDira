@@ -6,7 +6,7 @@ use stable_dira::msg::{
     AdminAddressesResponse, CW20DiraContractAddressResponse, CollateralPriceResponse,
     CollateralResponse, CollateralTokenDenomResponse, ExecuteMsg as DiraExecuteMsg,
     InstantiateMsg as DiraInstantiateMsg, LiquidationHealthResponse, MintableHealthResponse,
-    MintedDiraResponse, QueryMsg, StablecoinHealthResponse,
+    MintedDiraResponse, QueryMsg as StableDiraQueryMsg, StablecoinHealthResponse,
 };
 
 // Mock implementation for Dira stablecoin contract
@@ -568,7 +568,7 @@ fn test_query_functions() {
         .unwrap();
 
     // Query locked collateral
-    let query_locked = QueryMsg::QueryLockedCollateral {
+    let query_locked = StableDiraQueryMsg::QueryLockedCollateral {
         wallet_address_to_query: admin.clone(),
     };
     let res: CollateralResponse = app
@@ -582,7 +582,7 @@ fn test_query_functions() {
     dbg!("Admin's locked collateral:", res.collateral_locked);
 
     // Query minted DIRA
-    let query_minted = QueryMsg::QueryMintedDira {
+    let query_minted = StableDiraQueryMsg::QueryMintedDira {
         wallet_address_to_query: user.clone(),
     };
     let res: MintedDiraResponse = app
@@ -593,7 +593,7 @@ fn test_query_functions() {
     dbg!("User's minted DIRA:", res.dira_minted);
 
     // Query stablecoin health
-    let query_health = QueryMsg::QueryStablecoinHealth {
+    let query_health = StableDiraQueryMsg::QueryStablecoinHealth {
         stablecoin_minter_address_to_query: user.clone(),
     };
     let res: StablecoinHealthResponse = app
@@ -605,7 +605,10 @@ fn test_query_functions() {
     // Query collateral price
     let res: CollateralPriceResponse = app
         .wrap()
-        .query_wasm_smart(dira_contract.clone(), &QueryMsg::QueryCollateralPrice {})
+        .query_wasm_smart(
+            dira_contract.clone(),
+            &StableDiraQueryMsg::QueryCollateralPrice {},
+        )
         .unwrap();
     assert_eq!(res.collateral_price, Decimal::from_ratio(2500u128, 100u128));
     dbg!("Collateral price:", res.collateral_price);
@@ -613,21 +616,30 @@ fn test_query_functions() {
     // Query liquidation health
     let res: LiquidationHealthResponse = app
         .wrap()
-        .query_wasm_smart(dira_contract.clone(), &QueryMsg::QueryLiquidationHealth {})
+        .query_wasm_smart(
+            dira_contract.clone(),
+            &StableDiraQueryMsg::QueryLiquidationHealth {},
+        )
         .unwrap();
     dbg!("Liquidation health threshold:", res.liquidation_health);
 
     // Query mintable health
     let res: MintableHealthResponse = app
         .wrap()
-        .query_wasm_smart(dira_contract.clone(), &QueryMsg::QueryMintableHealth {})
+        .query_wasm_smart(
+            dira_contract.clone(),
+            &StableDiraQueryMsg::QueryMintableHealth {},
+        )
         .unwrap();
     dbg!("Mintable health threshold:", res.mintable_health);
 
     // Query admin addresses
     let res: AdminAddressesResponse = app
         .wrap()
-        .query_wasm_smart(dira_contract.clone(), &QueryMsg::QueryAdminAddresses {})
+        .query_wasm_smart(
+            dira_contract.clone(),
+            &StableDiraQueryMsg::QueryAdminAddresses {},
+        )
         .unwrap();
     dbg!("Admin addresses:", res.admin_addresses);
 
@@ -636,7 +648,7 @@ fn test_query_functions() {
         .wrap()
         .query_wasm_smart(
             dira_contract.clone(),
-            &QueryMsg::QueryCollateralTokenDenom {},
+            &StableDiraQueryMsg::QueryCollateralTokenDenom {},
         )
         .unwrap();
     assert_eq!(res.collateral_token_denom, "uatom");
@@ -647,7 +659,7 @@ fn test_query_functions() {
         .wrap()
         .query_wasm_smart(
             dira_contract.clone(),
-            &QueryMsg::QueryCW20DiraContractAddress {},
+            &StableDiraQueryMsg::QueryCW20DiraContractAddress {},
         )
         .unwrap();
     dbg!(
