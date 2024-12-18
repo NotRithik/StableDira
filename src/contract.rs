@@ -11,12 +11,14 @@ use cw2::set_contract_version;
 use cw20::TokenInfoResponse;
 
 use crate::error::ContractError;
+
 use crate::msg::{
     AdminAddressesResponse, CW20DiraContractAddressResponse, CollateralPriceResponse,
-    CollateralResponse, CollateralTokenDenomResponse, ExecuteMsg, InstantiateMsg,
-    LiquidationHealthResponse, MintableHealthResponse, MintedDiraResponse, QueryMsg,
-    StablecoinHealthResponse,
+    CollateralResponse, CollateralTokenDenomResponse, LiquidationHealthResponse,
+    MintableHealthResponse, MintedDiraResponse, StablecoinHealthResponse,
 };
+use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+
 use crate::state::{
     ADMIN_ADDRESSES, COLLATERAL_TOKEN_DENOM, COLLATERAL_TOKEN_PRICE, CW20_DIRA_CONTRACT_ADDRESS,
     LIQUIDATION_HEALTH, LOCKED_COLLATERAL, MINTABLE_HEALTH, MINTED_DIRA,

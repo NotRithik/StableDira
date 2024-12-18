@@ -2,7 +2,12 @@ use cosmwasm_std::{coins, Addr, Decimal, Uint128};
 use cw20::MinterResponse;
 use cw20_base::msg::{ExecuteMsg as Cw20ExecuteMsg, InstantiateMsg as Cw20InstantiateMsg};
 use cw_multi_test::{App, AppBuilder, Contract, ContractWrapper, Executor};
-use stable_dira::msg::{ExecuteMsg as DiraExecuteMsg, InstantiateMsg as DiraInstantiateMsg};
+use stable_dira::msg::{
+    AdminAddressesResponse, CW20DiraContractAddressResponse, CollateralPriceResponse,
+    CollateralResponse, CollateralTokenDenomResponse, ExecuteMsg as DiraExecuteMsg,
+    InstantiateMsg as DiraInstantiateMsg, LiquidationHealthResponse, MintableHealthResponse,
+    MintedDiraResponse, QueryMsg, StablecoinHealthResponse,
+};
 
 // Mock implementation for Dira stablecoin contract
 fn dira_contract() -> Box<dyn Contract<cosmwasm_std::Empty>> {
@@ -43,7 +48,7 @@ fn setup_app() -> (App, Addr, Addr, Addr, Addr) {
             .init_balance(
                 storage,
                 &Addr::unchecked("cosmwasm1qypqxpq9qcrsszgszyfpx9q4zct3sxfqx5vwjh"),
-                coins(1_000_000_000, "uatom"),
+                coins(100_000_000_000_000u128, "uatom"),
             )
             .unwrap();
 
@@ -52,7 +57,7 @@ fn setup_app() -> (App, Addr, Addr, Addr, Addr) {
             .init_balance(
                 storage,
                 &Addr::unchecked("cosmwasm1qypqxpq9qcrsszgszyfpx9q4zct3sy3q8mmchv"),
-                coins(1_000_000_000, "uatom"),
+                coins(100_000_000_000_000u128, "uatom"),
             )
             .unwrap();
     });
@@ -523,4 +528,130 @@ fn test_liquidate_collateral() {
     );
     assert!(res.is_err());
     dbg!("Liquidation failed for non-existing user");
+}
+
+#[test]
+fn test_query_functions() {
+    let (mut app, dira_contract, _cw20_contract, admin, user) = setup_app();
+
+    // Update initial state - Set collateral price
+    let set_price_msg = DiraExecuteMsg::SetCollateralPriceInDirham {
+        collateral_price_in_dirham: Decimal::from_ratio(2500u128, 100u128), // 25.00
+    };
+    app.execute_contract(admin.clone(), dira_contract.clone(), &set_price_msg, &[])
+        .unwrap();
+
+    // Lock collateral for both admin and user
+    let lock_collateral_msg = DiraExecuteMsg::LockCollateral {};
+    dbg!(app.execute_contract(
+        admin.clone(),
+        dira_contract.clone(),
+        &lock_collateral_msg,
+        &coins(100_000_000_000u128, "uatom"),
+    ))
+    .unwrap();
+    app.execute_contract(
+        user.clone(),
+        dira_contract.clone(),
+        &lock_collateral_msg,
+        &coins(100_000_000_000u128, "uatom"),
+    )
+    .unwrap();
+
+    // Mint DIRA for both admin and user
+    let mint_msg = DiraExecuteMsg::MintDira {
+        dira_to_mint: Decimal::from_ratio(5000u128, 100u128), // 50 DIRA
+    };
+    app.execute_contract(admin.clone(), dira_contract.clone(), &mint_msg, &[])
+        .unwrap();
+    app.execute_contract(user.clone(), dira_contract.clone(), &mint_msg, &[])
+        .unwrap();
+
+    // Query locked collateral
+    let query_locked = QueryMsg::QueryLockedCollateral {
+        wallet_address_to_query: admin.clone(),
+    };
+    let res: CollateralResponse = app
+        .wrap()
+        .query_wasm_smart(dira_contract.clone(), &query_locked)
+        .unwrap();
+    assert_eq!(
+        res.collateral_locked,
+        Decimal::from_ratio(100_000_000_000u128, 1000000u128)
+    );
+    dbg!("Admin's locked collateral:", res.collateral_locked);
+
+    // Query minted DIRA
+    let query_minted = QueryMsg::QueryMintedDira {
+        wallet_address_to_query: user.clone(),
+    };
+    let res: MintedDiraResponse = app
+        .wrap()
+        .query_wasm_smart(dira_contract.clone(), &query_minted)
+        .unwrap();
+    assert_eq!(res.dira_minted, Decimal::from_ratio(5000u128, 100u128));
+    dbg!("User's minted DIRA:", res.dira_minted);
+
+    // Query stablecoin health
+    let query_health = QueryMsg::QueryStablecoinHealth {
+        stablecoin_minter_address_to_query: user.clone(),
+    };
+    let res: StablecoinHealthResponse = app
+        .wrap()
+        .query_wasm_smart(dira_contract.clone(), &query_health)
+        .unwrap();
+    dbg!("User's stablecoin health:", res.health);
+
+    // Query collateral price
+    let res: CollateralPriceResponse = app
+        .wrap()
+        .query_wasm_smart(dira_contract.clone(), &QueryMsg::QueryCollateralPrice {})
+        .unwrap();
+    assert_eq!(res.collateral_price, Decimal::from_ratio(2500u128, 100u128));
+    dbg!("Collateral price:", res.collateral_price);
+
+    // Query liquidation health
+    let res: LiquidationHealthResponse = app
+        .wrap()
+        .query_wasm_smart(dira_contract.clone(), &QueryMsg::QueryLiquidationHealth {})
+        .unwrap();
+    dbg!("Liquidation health threshold:", res.liquidation_health);
+
+    // Query mintable health
+    let res: MintableHealthResponse = app
+        .wrap()
+        .query_wasm_smart(dira_contract.clone(), &QueryMsg::QueryMintableHealth {})
+        .unwrap();
+    dbg!("Mintable health threshold:", res.mintable_health);
+
+    // Query admin addresses
+    let res: AdminAddressesResponse = app
+        .wrap()
+        .query_wasm_smart(dira_contract.clone(), &QueryMsg::QueryAdminAddresses {})
+        .unwrap();
+    dbg!("Admin addresses:", res.admin_addresses);
+
+    // Query collateral token denom
+    let res: CollateralTokenDenomResponse = app
+        .wrap()
+        .query_wasm_smart(
+            dira_contract.clone(),
+            &QueryMsg::QueryCollateralTokenDenom {},
+        )
+        .unwrap();
+    assert_eq!(res.collateral_token_denom, "uatom");
+    dbg!("Collateral token denom:", res.collateral_token_denom);
+
+    // Query CW20 DIRA contract address
+    let res: CW20DiraContractAddressResponse = app
+        .wrap()
+        .query_wasm_smart(
+            dira_contract.clone(),
+            &QueryMsg::QueryCW20DiraContractAddress {},
+        )
+        .unwrap();
+    dbg!(
+        "CW20 DIRA contract address:",
+        res.cw20_dira_contract_address
+    );
 }
