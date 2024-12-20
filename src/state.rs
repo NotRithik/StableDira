@@ -1,46 +1,35 @@
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-
 use cosmwasm_std::{Addr, Decimal};
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum CollateralToken {
-    NativeToken,
-    CW20Token(String),
-    CW721Token(String),
-}
-
-// #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-// #[serde(rename_all = "snake_case")]
-// pub struct CollateralTokenAmount {
-//     pub collateral_token: CollateralToken,
-//     pub collateral_amount: u128,
-// }
-
-pub const NATIVE_TOKEN_DENOM: cw_storage_plus::Item<String> =
+// What token is allowed to be used as collateral for Dira
+pub const COLLATERAL_TOKEN_DENOM: cw_storage_plus::Item<String> =
     cw_storage_plus::Item::new("native-token-name");
 
-pub const ADMIN_ADDRESS: cw_storage_plus::Item<Addr> =
-    cw_storage_plus::Item::new("admin-address");
+// List of admin addresses that are allowed to change parameters of the contract
+pub const ADMIN_ADDRESSES: cw_storage_plus::Item<Vec<Addr>> =
+    cw_storage_plus::Item::new("admin-addresses");
 
-
+// Admin changeable, below what health of the collateral for the stablecoin can
+// a user's collateral be liquidated?
 pub const LIQUIDATION_HEALTH: cw_storage_plus::Item<Decimal> =
-    // Admin changeable, below what health of the collateral for the stablecoin can
-    // a user's collateral be liquidated?
     cw_storage_plus::Item::new("liquidation-health");
 
+// Admin changeable, what is the lowest health at which a user can mint stablecoins
+// has to be higher than the liquidation health
+pub const MINTABLE_HEALTH: cw_storage_plus::Item<Decimal> = 
+    cw_storage_plus::Item::new("mintable-health");
 
-pub const ALLOWED_COLLATERALS: cw_storage_plus::Item<Vec<CollateralToken>> =
-    cw_storage_plus::Item::new("allowed-collaterals");
-pub const LOCKED_COLLATERALS: cw_storage_plus::Map<Addr, schemars::Map<CollateralToken, u128>> =
+// Track collateral locked by each wallet
+pub const LOCKED_COLLATERAL: cw_storage_plus::Map<Addr, Decimal> =
     cw_storage_plus::Map::new("locked-collaterals");
 
+// Track dira minted by each wallet
+pub const MINTED_DIRA: cw_storage_plus::Map<Addr, Decimal> =
+    cw_storage_plus::Map::new("minted-dira");
 
-pub const MINTED_RUPEES: cw_storage_plus::Map<Addr, Vec<u128>> =
-    // Track how many rupees minted by each wallet,
-    // stored as number of paiseß
-    cw_storage_plus::Map::new("minted-rupees");
-pub const COLLATERAL_TOKEN_PRICES: cw_storage_plus::Map<CollateralToken, u128> =
-    // Collateral prices in rupees, stored as number of paise per token
-    cw_storage_plus::Map::new("collateral-prices");
+// Collateral prices in dirham
+pub const COLLATERAL_TOKEN_PRICE: cw_storage_plus::Item<Decimal> =
+    cw_storage_plus::Item::new("collateral-price");
+
+// Contract address of the cw20 Dira token
+pub const CW20_DIRA_CONTRACT_ADDRESS: cw_storage_plus::Item<Addr> =
+    cw_storage_plus::Item::new("cw20-dira-contract-address");

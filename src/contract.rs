@@ -1,24 +1,31 @@
+use core::panic;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult, WasmMsg, WasmQuery, Decimal,
+    to_json_binary, Addr, BankMsg, Binary, Coin, Decimal, Deps, DepsMut, Env, MessageInfo,
+    QueryRequest, Response, StdError, StdResult, Uint128, WasmQuery,
 };
 
 use cw2::set_contract_version;
+use cw20::TokenInfoResponse;
 
 use crate::error::ContractError;
+
+use crate::msg::{
+    AdminAddressesResponse, CW20DiraContractAddressResponse, CollateralPriceResponse,
+    CollateralResponse, CollateralTokenDenomResponse, LiquidationHealthResponse,
+    MintableHealthResponse, MintedDiraResponse, StablecoinHealthResponse,
+};
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+
 use crate::state::{
-    CollateralToken, ADMIN_ADDRESS, ALLOWED_COLLATERALS, COLLATERAL_TOKEN_PRICES,
-    LIQUIDATION_HEALTH, LOCKED_COLLATERALS, MINTED_RUPEES, NATIVE_TOKEN_DENOM,
+    ADMIN_ADDRESSES, COLLATERAL_TOKEN_DENOM, COLLATERAL_TOKEN_PRICE, CW20_DIRA_CONTRACT_ADDRESS,
+    LIQUIDATION_HEALTH, LOCKED_COLLATERAL, MINTABLE_HEALTH, MINTED_DIRA,
 };
 
-use cw20::{Cw20ExecuteMsg, Cw20QueryMsg};
-use cw721::{Cw721ExecuteMsg, Cw721QueryMsg};
-
 // version info for migration info
-const CONTRACT_NAME: &str = "crates.io:cosmwasm-stable-rupee";
+const CONTRACT_NAME: &str = "crates.io:cosmwasm-stable-dira";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /****
@@ -33,30 +40,49 @@ pub fn instantiate(
     _env: Env,
     info: MessageInfo,
     msg: InstantiateMsg,
-    // liquidation_health: f32,
-    // allowed_collaterals: Vec<CollateralToken>,
 ) -> Result<Response, ContractError> {
     deps.api.debug("Instantiating contract...");
     deps.api.debug(&format!("Received message: {:?}", msg));
 
+    if msg.liquidation_health.is_zero() || msg.mintable_health.is_zero() {
+        return Err(ContractError::HealthCannotBeZero {});
+    }
+
+    if msg.collateral_token_denom.is_empty() {
+        return Err(ContractError::MissingCollateralTokenDenom {});
+    }
+
+    if msg.mintable_health < msg.liquidation_health {
+        return Err(ContractError::MintableHealthLowerThanLiquidationHealth {});
+    }
+
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    ADMIN_ADDRESS.save(deps.storage, &info.sender)?;
+    ADMIN_ADDRESSES.save(deps.storage, &vec![info.sender.clone()])?;
     LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health)?;
-    ALLOWED_COLLATERALS.save(deps.storage, &msg.allowed_collaterals)?;
-    NATIVE_TOKEN_DENOM.save(deps.storage, &msg.native_token_denom)?;
-    // dbg!(&LIQUIDATION_HEALTH.save(deps.storage, &Decimal::from_ratio(1u128, 2u128)));
-    // dbg!(&ALLOWED_COLLATERALS.save(deps.storage, &vec![CollateralToken::NativeToken]));
+    MINTABLE_HEALTH.save(deps.storage, &msg.mintable_health)?;
+    COLLATERAL_TOKEN_DENOM.save(deps.storage, &msg.collateral_token_denom)?;
+
+    match msg.cw20_dira_contract_address {
+        Some(contract_address) => {
+            if helper_is_cw20_contract(deps.as_ref(), &contract_address) {
+                CW20_DIRA_CONTRACT_ADDRESS.save(deps.storage, &contract_address)?;
+            } else {
+                return Err(ContractError::InvalidCW20ContractAddress {});
+            }
+        }
+        _ => {}
+    }
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
-        .add_attribute("owner", info.sender))
+        .add_attribute("admin", info.sender))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
@@ -64,69 +90,55 @@ pub fn execute(
     deps.api.debug(&format!("Received message: {:?}", &msg));
 
     match msg {
-        ExecuteMsg::LockCollateralToken {
-            collateral_token_to_lock,
-            collateral_amount_to_lock,
-        } => execute_lock_collateral(
-            deps,
-            info,
-            env,
-            schemars::Map::from([(collateral_token_to_lock, collateral_amount_to_lock)]),
-        ),
-        ExecuteMsg::LockCollateralTokens {
-            collateral_tokens_to_lock,
-        } => execute_lock_collateral(deps, info, env, collateral_tokens_to_lock),
+        ExecuteMsg::LockCollateral {} => execute_lock_collateral(deps, info),
 
-        ExecuteMsg::UnlockCollateralToken {
-            collateral_token_to_unlock,
+        ExecuteMsg::UnlockCollateral {
             collateral_amount_to_unlock,
-        } => execute_unlock_collateral(
-            deps,
-            info,
-            env,
-            schemars::Map::from([(collateral_token_to_unlock, collateral_amount_to_unlock)]),
-        ),
-        ExecuteMsg::UnlockCollateralTokens {
-            collateral_tokens_to_unlock,
-        } => execute_unlock_collateral(deps, info, env, collateral_tokens_to_unlock),
+        } => execute_unlock_collateral(deps, info, collateral_amount_to_unlock),
 
-        ExecuteMsg::MintRupees { rupees_to_mint } => {
-            execute_mint_rupees(deps, info.sender.into_string(), rupees_to_mint)
-        }
-        ExecuteMsg::ReturnRupees { rupees_to_return } => {
-            execute_return_rupees(deps, info.sender.into_string(), rupees_to_return)
-        }
+        ExecuteMsg::MintDira { dira_to_mint } => execute_mint_dira(deps, info, dira_to_mint),
+        ExecuteMsg::BurnDira { dira_to_burn } => execute_burn_dira(deps, info, dira_to_burn),
 
         ExecuteMsg::LiquidateStablecoins {
-            liquidate_stablecoin_minter_address,
-        } => execute_liquidate_stablecoin_minter(
-            deps,
-            info.sender.into_string(),
-            liquidate_stablecoin_minter_address,
-        ),
+            wallet_address_to_liquidate,
+        } => execute_liquidate_stablecoin_minter(deps, info, wallet_address_to_liquidate),
 
-        ExecuteMsg::SetCollateralPricesInRupees {
-            collateral_prices_in_rupees,
-        } => execute_set_collateral_prices_in_rupees(
-            deps,
-            info.sender.into_string(),
-            collateral_prices_in_rupees,
-        ),
+        ExecuteMsg::SetCollateralPriceInDirham {
+            collateral_price_in_dirham,
+        } => execute_set_collateral_price_in_dirham(deps, info, collateral_price_in_dirham),
+
+        ExecuteMsg::SetLiquidationHealth { liquidation_health } => {
+            execute_set_liquidation_health(deps, info, liquidation_health)
+        }
+
+        ExecuteMsg::SetMintableHealth { mintable_health } => {
+            execute_set_mintable_health(deps, info, mintable_health)
+        }
+
+        ExecuteMsg::SetCW20DiraContractAddress {
+            cw20_dira_contract_address,
+        } => execute_set_cw20_dira_contact_address(deps, cw20_dira_contract_address),
     }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::QueryCollateralPrices { collateral_tokens } => {
-            query_collateral_prices(&deps, collateral_tokens)
-        }
         QueryMsg::QueryLockedCollateral {
-            collateral_address_to_query,
-        } => query_locked_collateral(&deps, collateral_address_to_query),
+            wallet_address_to_query,
+        } => query_locked_collateral(deps, wallet_address_to_query),
+        QueryMsg::QueryMintedDira {
+            wallet_address_to_query,
+        } => query_minted_dira(deps, wallet_address_to_query),
         QueryMsg::QueryStablecoinHealth {
             stablecoin_minter_address_to_query,
-        } => query_stablecoin_health(&deps, stablecoin_minter_address_to_query),
+        } => query_stablecoin_health(deps, stablecoin_minter_address_to_query),
+        QueryMsg::QueryCollateralPrice {} => query_collateral_price(deps),
+        QueryMsg::QueryLiquidationHealth {} => query_liquidation_health(deps),
+        QueryMsg::QueryMintableHealth {} => query_mintable_health(deps),
+        QueryMsg::QueryAdminAddresses {} => query_admin_addresses(deps),
+        QueryMsg::QueryCollateralTokenDenom {} => query_collateral_token_denom(deps),
+        QueryMsg::QueryCW20DiraContractAddress {} => query_cw20_dira_contract_address(deps),
     }
 }
 
@@ -134,389 +146,557 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
  * THIS IS THE SECTION FOR ACTUAL IMPLEMENTATIONS OF ALL THE FUNCTIONS USED ABOVE!
  ****/
 
-// Function to lock a single collateral token
-fn execute_lock_collateral(
-    deps: DepsMut,
-    info: MessageInfo,
-    env: Env,
-    collateral_tokens: schemars::Map<CollateralToken, u128>,
-) -> Result<Response, ContractError> {
-    let mut lock_collateral_messages: Vec<CosmosMsg> = Vec::new();
-    let sender_address = info.sender.to_string().clone();
+// Function to calculate stablecoin health of a particular user
+// based on how much stablecoin they've minted and how much
+// collateral they have locked
+fn helper_calculate_stablecoin_health(
+    minted_dira: Decimal,
+    locked_collateral: Decimal,
+    collateral_price_in_dirham: Decimal,
+) -> Decimal {
+    let locked_collateral_value_in_dirham = collateral_price_in_dirham * locked_collateral;
 
-    let mut funds_deposited = info
+    if minted_dira.is_zero() {
+        // if !locked_collateral_value_in_dirham.is_zero() {
+        //     return Decimal::zero();
+        // } else {
+        return Decimal::MAX;
+        // }
+    }
+
+    return locked_collateral_value_in_dirham / minted_dira;
+}
+
+// Function to calculate how much Dira the user can mint
+// based on how much collateral is locked, what the
+// value of the collateral is and what the
+// mintable health is
+fn helper_calculate_max_mintable_dira(
+    locked_collateral: Decimal,
+    collateral_price_in_dirham: Decimal,
+    mintable_health: Decimal,
+) -> Decimal {
+    let max_mintable_dira = (locked_collateral * collateral_price_in_dirham) / mintable_health;
+
+    max_mintable_dira
+}
+
+// Function to calculate how much collateral can be unlocked
+// based on how much Dira the user has minted, what the value
+// of the collateral is, and what the liquidation health is
+fn helper_calculate_max_unlockable_collateral(
+    locked_collateral: Decimal,
+    collateral_price_in_dirham: Decimal,
+    minted_dira: Decimal,
+    mintable_health: Decimal,
+) -> Decimal {
+    let required_collateral_for_minted_dira =
+        (minted_dira * mintable_health) / collateral_price_in_dirham;
+    let unlockable_collateral = locked_collateral - required_collateral_for_minted_dira;
+
+    unlockable_collateral
+}
+
+fn helper_is_cw20_contract(deps: Deps, contract_addr: &Addr) -> bool {
+    let query_msg = to_json_binary(&cw20::Cw20QueryMsg::TokenInfo {}).unwrap();
+    let query = QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: contract_addr.to_string(),
+        msg: query_msg,
+    });
+
+    match deps.querier.query::<TokenInfoResponse>(&query) {
+        Ok(_response) => true, // The contract supports CW20 TokenInfo query
+        Err(_) => false,       // Not a CW20 contract
+    }
+}
+
+// Function to lock collateral
+fn execute_lock_collateral(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
+    let collateral_token_denom = COLLATERAL_TOKEN_DENOM
+        .load(deps.storage)
+        .map_err(|_| ContractError::MissingCollateralTokenDenom {})?;
+
+    let message_sender = info.sender;
+
+    // Check if the user has sent enough funds along with the transaction
+    let sent_funds = info
         .funds
         .iter()
-        .find(|coin| {
-            coin.denom
-                == NATIVE_TOKEN_DENOM
-                    .load(deps.storage)
-                    .unwrap_or(String::from("uatom"))
-        })
-        .map(|coin| coin.amount.u128())
-        .unwrap_or(0);
+        .find(|coin| coin.denom == collateral_token_denom)
+        .ok_or(ContractError::InsufficientFundsSent {})
+        .unwrap();
 
-    for (collateral_token, collateral_amount) in collateral_tokens {
-        match collateral_token.clone() {
-            CollateralToken::NativeToken => {
-                if funds_deposited < collateral_amount {
-                    panic!("Not enough funds deposited");
-                }
-                funds_deposited -= collateral_amount;
+    let sent_amount = Decimal::from_atomics(sent_funds.amount, 6).unwrap();
 
-                LOCKED_COLLATERALS.update(deps.storage, Addr::unchecked(sender_address.clone()),
-            |previously_locked_collaterals|
-                    -> StdResult<schemars::Map<CollateralToken, u128>> {
-                        let mut collaterals = previously_locked_collaterals.unwrap_or_default();
-                        *collaterals.entry(collateral_token).or_insert(0) += collateral_amount;
-                        Ok(collaterals)
-                })?;
-                // TODO: Implement error handling for different types of errors that could be returned instead of
-                // propagating the error up with stack with ?
-            }
-
-            CollateralToken::CW20Token(cw20_collateral_token_addr) => {
-                let transfer_msg = Cw20ExecuteMsg::TransferFrom {
-                    owner: sender_address.clone(), // The user (sender) must have approved the contract to spend their tokens
-                    recipient: env.contract.address.to_string(), // The contract itself as the recipient
-                    amount: collateral_amount.into(),            // The amount to transfer
-                };
-
-                // Create a WasmMsg to call the CW20 contract
-                let transfer_from_msg = WasmMsg::Execute {
-                    contract_addr: cw20_collateral_token_addr.to_string(), // Address of the CW20 token contract
-                    msg: to_json_binary(&transfer_msg)?, // Convert the TransferFrom message to binary format
-                    funds: vec![], // No native tokens are sent along with this message
-                };
-
-                lock_collateral_messages.push(transfer_from_msg.into());
-
-                LOCKED_COLLATERALS.update(deps.storage, Addr::unchecked(sender_address.clone()),
-                     |previously_locked_collaterals|
-                     -> StdResult<schemars::Map<CollateralToken, u128>> {
-                        let mut collaterals = previously_locked_collaterals.unwrap_or_default();
-                        *collaterals.entry(collateral_token).or_insert(0) += collateral_amount;
-                        Ok(collaterals)
-                     }
-                    )?;
-                // TODO: Implement error handling for different types of errors that could be returned instead of
-                // propagating the error up with stack with ?
-
-                // // Add the transfer message to the response
-                // return Ok(Response::new()
-                //     .add_message(transfer_from_msg)
-                //     .add_attribute("action", "transfer_cw20_collateral")
-                //     .add_attribute("cw20_contract", cw20_collateral_token_addr)
-                //     .add_attribute(
-                //         "amount",
-                //         collateral_token_amount.collateral_amount.to_string(),
-                //     ));
-            }
-
-            CollateralToken::CW721Token(cw721_collateral_token_addr) => {
-                panic!("UNIMPLEMENTED. Can't have NFTs or CW721 tokens as collateral just yet.");
-            }
+    match LOCKED_COLLATERAL.update(
+        deps.storage,
+        message_sender.clone(),
+        |balance: Option<Decimal>| -> Result<Decimal, ContractError> {
+            Ok(balance.unwrap_or_default() + sent_amount)
+        },
+    ) {
+        Ok(_result) => {}
+        Err(error) => {
+            dbg!("Error in updating LOCKED_COLLATERAL storage item");
+            return Err(error);
         }
-    }
+    };
 
     // Send the lock collateral messages and return the Ok response
     Ok(Response::new()
-        .add_messages(lock_collateral_messages)
         .add_attribute("action", "lock_collateral")
-        .add_attribute("sender", sender_address))
+        .add_attribute("sender", message_sender.clone())
+        .add_attribute(
+            "total_funds_locked_by_user",
+            LOCKED_COLLATERAL
+                .load(deps.storage, message_sender)
+                .unwrap_or_default()
+                .to_string(),
+        ))
 }
 
-// Function to unlock a single collateral token
+// Function to unlock collateral
 fn execute_unlock_collateral(
     deps: DepsMut,
     info: MessageInfo,
-    env: Env,
-    collateral_tokens: schemars::Map<CollateralToken, u128>,
+    collateral_amount: Decimal,
 ) -> Result<Response, ContractError> {
-    let mut unlock_collateral_messages: Vec<CosmosMsg> = Vec::new();
-    let sender_address = info.sender.to_string().clone();
+    let collateral_token_denom = COLLATERAL_TOKEN_DENOM
+        .load(deps.storage)
+        .map_err(|_| ContractError::MissingCollateralTokenDenom {})?;
 
-    
-    for (collateral_token, collateral_amount) in collateral_tokens {
-        let _ = match collateral_token.clone() {
-            CollateralToken::NativeToken => {
-                let res = LOCKED_COLLATERALS.load(deps.storage, Addr::unchecked(sender_address.clone()));
-                panic!("Result: {}", res.iter().len());
-                let _ = LOCKED_COLLATERALS.update(deps.storage, Addr::unchecked(sender_address.clone()),
-                |previously_locked_collaterals|
-                -> StdResult<schemars::Map<CollateralToken, u128>> {
-                    panic!("collaterals??");
-                    let mut collaterals = previously_locked_collaterals.unwrap_or_default();
-                    collaterals.entry(collateral_token).and_modify(|locked_amount| {
-                        if *locked_amount >= collateral_amount {
-                            *locked_amount -= collateral_amount;
-                        } else {
-                            //TODO: Error handling
-                            panic!("Not enough collateral locked!");
-                        }
-                    }).or_insert_with(|| {
-                        //TODO: Error handling
-                        panic!("Not enough collateral locked!");
-                    });
-                    Ok(collaterals)
-                });
+    let message_sender = info.sender;
 
-                // Create unlock collateral message
-                let send_msg = CosmosMsg::Bank(BankMsg::Send {
-                    to_address: sender_address.clone(),
-                    amount: vec![Coin {
-                        denom: NATIVE_TOKEN_DENOM
-                            .load(deps.storage)
-                            .unwrap_or(String::from("uatom")),
-                        amount: collateral_amount.into(),
-                    }],
-                });
+    let locked_collateral = LOCKED_COLLATERAL
+        .load(deps.storage, message_sender.clone())
+        .unwrap_or_default();
 
-                // Push the message onto the unlock_collateral_messages vector
-                unlock_collateral_messages.push(send_msg);
-            }
+    let minted_dira = MINTED_DIRA
+        .load(deps.storage, message_sender.clone())
+        .unwrap_or_default();
 
-            CollateralToken::CW20Token(cw20_collateral_token_addr) => {
-                LOCKED_COLLATERALS.update(deps.storage, Addr::unchecked(sender_address.clone()),
-            |previously_locked_collaterals|
-                    -> StdResult<schemars::Map<CollateralToken, u128>> {
-                        let mut collaterals = previously_locked_collaterals.unwrap_or_default();
-                        collaterals.entry(collateral_token).and_modify(|locked_amount| {
-                            if *locked_amount >= collateral_amount {
-                                *locked_amount -= collateral_amount;
-                            } else {
-                                //TODO: Error handling
-                                panic!("Not enough collateral locked!");
-                            }
-                        }).or_insert_with(|| {
-                            //TODO: Error handling
-                            panic!("Not enough collateral locked!");
-                        });
-                        Ok(collaterals)
-                })?;
+    let mintable_health = MINTABLE_HEALTH.load(deps.storage)?;
 
-                // Create unlock collateral message
-                let transfer_message = Cw20ExecuteMsg::Transfer {
-                    recipient: (sender_address.clone()),
-                    amount: (collateral_amount.into()),
-                };
+    let collateral_price_in_dirham = COLLATERAL_TOKEN_PRICE
+        .may_load(deps.storage)?
+        .ok_or(ContractError::CollateralPriceNotSet {})
+        .unwrap();
 
-                let cw20collateral_transfer_message = CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: cw20_collateral_token_addr.to_string(),
-                    msg: to_json_binary(&transfer_message)?,
-                    funds: vec![],
-                });
+    let max_unlockable_collateral = helper_calculate_max_unlockable_collateral(
+        locked_collateral,
+        collateral_price_in_dirham,
+        minted_dira,
+        mintable_health,
+    );
 
-                // Push the message onto the unlock_collateral_messages vector
-                unlock_collateral_messages.push(cw20collateral_transfer_message);
-            }
-
-            CollateralToken::CW721Token(cw721_collateral_token_addr) => {
-                panic!("UNIMPLEMENTED. Can't unlock NFTs or CW721 tokens as collateral just yet.");
-            }
-        };
+    if collateral_amount > max_unlockable_collateral {
+        return Err(ContractError::UnlockAmountTooHigh {
+            max_unlockable: max_unlockable_collateral,
+        });
     }
 
-    // panic!("TODO: Implement this function!");
+    LOCKED_COLLATERAL.save(
+        deps.storage,
+        message_sender.clone(),
+        &(locked_collateral - collateral_amount),
+    )?;
+
+    let return_collateral_to_user_message = BankMsg::Send {
+        to_address: message_sender.to_string(),
+        amount: vec![Coin {
+            denom: collateral_token_denom,
+            amount: collateral_amount.atomics() / Uint128::from(u128::pow(10, 12)),
+        }],
+    };
+
     Ok(Response::new()
-        .add_messages(unlock_collateral_messages)
-        .add_attribute("action", "lock_collateral")
-        .add_attribute("sender", sender_address))
+        .add_message(return_collateral_to_user_message)
+        .add_attribute("action", "unlock_collateral")
+        .add_attribute("sender", message_sender.clone())
+        .add_attribute(
+            "total_funds_locked_by_user",
+            LOCKED_COLLATERAL
+                .load(deps.storage, message_sender)
+                .unwrap_or_default()
+                .to_string(),
+        ))
 }
 
-// Function to mint rupees
-fn execute_mint_rupees(
+// Function to mint dira
+fn execute_mint_dira(
     deps: DepsMut,
-    sender: String,
-    rupees_to_mint: u128,
+    info: MessageInfo,
+    dira_to_mint: Decimal,
 ) -> Result<Response, ContractError> {
-    panic!("TODO: Implement this function!");
+    // First calculate how much dira this user can mint based on current collateral price
+    // and how much collateral they have locked
+
+    // To do this, first load all the variables from the blockchain
+    let collateral_locked_by_user =
+        match LOCKED_COLLATERAL.may_load(deps.storage, info.sender.clone()) {
+            Ok(Some(locked_collateral)) => locked_collateral,
+            _ => return Err(ContractError::InsufficientCollateral {}),
+        };
+
+    let previously_minted_dira = match MINTED_DIRA.may_load(deps.storage, info.sender.clone()) {
+        Ok(Some(minted_dira)) => minted_dira,
+        _ => Decimal::zero(),
+    };
+
+    let collateral_price_in_dirham = match COLLATERAL_TOKEN_PRICE.may_load(deps.storage) {
+        Ok(Some(collateral_price)) => collateral_price,
+        _ => return Err(ContractError::CollateralPriceNotSet {}),
+    };
+
+    let mintable_health = MINTABLE_HEALTH.load(deps.storage).unwrap();
+
+    // Finally use the helper function to calculate max mintable dira by this user
+    let max_mintable_dira = helper_calculate_max_mintable_dira(
+        collateral_locked_by_user,
+        collateral_price_in_dirham,
+        mintable_health,
+    );
+
+    if dira_to_mint + previously_minted_dira > max_mintable_dira {
+        return Err(ContractError::InsufficientCollateral {});
+    }
+
+    // Else, mint dira and transfer it to user, add that message to the response
+    MINTED_DIRA.save(
+        deps.storage,
+        info.sender.clone(),
+        &(dira_to_mint + previously_minted_dira),
+    )?;
+
+    // Get the CW20 contract address
+    let cw20_dira_contract_address = match CW20_DIRA_CONTRACT_ADDRESS.may_load(deps.storage) {
+        Ok(Some(contract_address)) => contract_address,
+        _ => return Err(ContractError::CW20DiraContractAddressNotSet {}),
+    };
+
+    // Mint CW20 tokens
+    let mint_msg = cw20::Cw20ExecuteMsg::Mint {
+        recipient: info.sender.to_string(),
+        amount: dira_to_mint.atomics() / Uint128::from(u128::pow(10, 12)),
+    };
+
+    let mint_cw20_message = cosmwasm_std::WasmMsg::Execute {
+        contract_addr: cw20_dira_contract_address.to_string(),
+        msg: to_json_binary(&mint_msg)?,
+        funds: vec![],
+    };
+
+    Ok(Response::new()
+        .add_message(mint_cw20_message)
+        .add_attribute("action", "mint_dira")
+        .add_attribute("sender", info.sender.to_string())
+        .add_attribute(
+            "total_dira_minted_by_sender",
+            (dira_to_mint + previously_minted_dira).to_string(),
+        ))
 }
 
-// Function to return rupees
-fn execute_return_rupees(
+// Function to burn dira for the original collateral
+fn execute_burn_dira(
     deps: DepsMut,
-    sender: String,
-    rupees_to_return: u128,
+    info: MessageInfo,
+    dira_to_return: Decimal,
 ) -> Result<Response, ContractError> {
-    panic!("TODO: Implement this function!");
+    let previously_minted_dira = match MINTED_DIRA.may_load(deps.storage, info.sender.clone()) {
+        Ok(Some(minted_dira)) => minted_dira,
+        _ => Decimal::zero(),
+    };
+
+    if dira_to_return > previously_minted_dira {
+        return Err(ContractError::ReturningMoreDiraThanMinted {});
+    }
+
+    MINTED_DIRA.save(
+        deps.storage,
+        info.sender.clone(),
+        &(previously_minted_dira - dira_to_return),
+    )?;
+
+    // Get the CW20 contract address
+    let cw20_dira_contract_address = match CW20_DIRA_CONTRACT_ADDRESS.may_load(deps.storage) {
+        Ok(Some(contract_address)) => contract_address,
+        _ => return Err(ContractError::CW20DiraContractAddressNotSet {}),
+    };
+
+    // Burn CW20 tokens
+    let burn_msg = cw20::Cw20ExecuteMsg::BurnFrom {
+        owner: info.sender.to_string(),
+        amount: dira_to_return.atomics() / Uint128::from(u128::pow(10, 12)),
+    };
+
+    let burn_cw20_message = cosmwasm_std::WasmMsg::Execute {
+        contract_addr: cw20_dira_contract_address.to_string(),
+        msg: to_json_binary(&burn_msg)?,
+        funds: vec![],
+    };
+
+    Ok(Response::new()
+        .add_message(burn_cw20_message)
+        .add_attribute("action", "burn_dira")
+        .add_attribute("sender", info.sender.to_string())
+        .add_attribute(
+            "total_dira_remaining_by_sender",
+            (previously_minted_dira - dira_to_return).to_string(),
+        ))
 }
 
 // Function to liquidate stablecoins
 fn execute_liquidate_stablecoin_minter(
     deps: DepsMut,
-    sender: String,
-    liquidate_stablecoin_minter_address: String,
+    info: MessageInfo,
+    wallet_address_to_liquidate: Addr,
 ) -> Result<Response, ContractError> {
-    panic!("TODO: Implement this function!");
+    // Validate the wallet address
+    deps.api
+        .addr_validate(wallet_address_to_liquidate.as_str())
+        .map_err(|_| ContractError::InvalidWalletAddress {})?;
+
+    // Load relevant data for liquidation
+    let dira_minted_by_wallet_to_liquidate = MINTED_DIRA
+        .load(deps.storage, wallet_address_to_liquidate.clone())
+        .unwrap_or_default();
+
+    let collateral_price_in_dirham = COLLATERAL_TOKEN_PRICE
+        .load(deps.storage)
+        .map_err(|_| ContractError::CollateralPriceNotSet {})?;
+
+    let collateral_locked_by_user_to_liquidate = LOCKED_COLLATERAL
+        .load(deps.storage, wallet_address_to_liquidate.clone())
+        .unwrap_or_default();
+
+    let liquidation_health = LIQUIDATION_HEALTH.load(deps.storage)?;
+
+    // Calculate health
+    let user_health = helper_calculate_stablecoin_health(
+        dira_minted_by_wallet_to_liquidate,
+        collateral_locked_by_user_to_liquidate,
+        collateral_price_in_dirham,
+    );
+
+    // Check if the user is liquidatable
+    if user_health >= liquidation_health {
+        return Err(ContractError::TooHealthyToLiquidate {
+            wallet_address: wallet_address_to_liquidate,
+        });
+    }
+
+    // Liquidate: Reset the collateral to zero
+    LOCKED_COLLATERAL.save(
+        deps.storage,
+        wallet_address_to_liquidate.clone(),
+        &Decimal::zero(),
+    )?;
+
+    let mut liquidated_dira = Decimal::zero();
+    MINTED_DIRA.update(
+        deps.storage,
+        wallet_address_to_liquidate.clone(),
+        |minted_dira| {
+            liquidated_dira = minted_dira.unwrap_or_default();
+            Ok::<Decimal, StdError>(Decimal::zero())
+        },
+    )?;
+
+    // Return a successful response
+    Ok(Response::new()
+        .add_attribute("action", "liquidate_stablecoins")
+        .add_attribute("liquidated_wallet", wallet_address_to_liquidate.to_string())
+        .add_attribute(
+            "liquidated_collateral",
+            collateral_locked_by_user_to_liquidate.to_string(),
+        )
+        .add_attribute("liquidated_dira", liquidated_dira.to_string())
+        .add_attribute("initiator", info.sender.to_string())
+        .add_attribute("liquidator_reward_paid", "0"))
+    // TODO: Update liquidator reward logic here
 }
 
-// Function to set collateral prices in rupees
-fn execute_set_collateral_prices_in_rupees(
+// Function to set collateral prices in dirham
+fn execute_set_collateral_price_in_dirham(
     deps: DepsMut,
-    sender: String,
-    collateral_prices_in_rupees: schemars::Map<CollateralToken, u128>,
+    info: MessageInfo,
+    collateral_price_in_dirham: Decimal,
 ) -> Result<Response, ContractError> {
-    panic!("TODO: Implement this function!");
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
+
+    if !admins.contains(&info.sender) {
+        return Err(ContractError::UnauthorizedUser {});
+    }
+
+    match COLLATERAL_TOKEN_PRICE.save(deps.storage, &collateral_price_in_dirham) {
+        Ok(_result) => {}
+        Err(error) => {
+            dbg!(&error);
+            panic!("Error in updating COLLATERAL_TOKEN_PRICE storage item");
+        }
+    }
+
+    Ok(Response::new()
+        .add_attribute("action", "set_collateral_price_in_dirham")
+        .add_attribute("sender", info.sender)
+        .add_attribute(
+            "new_collateral_price",
+            collateral_price_in_dirham.to_string(),
+        ))
 }
 
-// Query function to get collateral prices
-fn query_collateral_prices(
-    deps: &Deps,
-    collateral_tokens: Option<Vec<CollateralToken>>,
-) -> StdResult<Binary> {
-    panic!("TODO: Implement this function!");
+// Function to set liquidation health
+fn execute_set_liquidation_health(
+    deps: DepsMut,
+    info: MessageInfo,
+    liquidation_health: Decimal,
+) -> Result<Response, ContractError> {
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
+
+    if !admins.contains(&info.sender) {
+        return Err(ContractError::UnauthorizedUser {});
+    }
+
+    LIQUIDATION_HEALTH.save(deps.storage, &liquidation_health)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "set_liquidation_health")
+        .add_attribute("sender", info.sender)
+        .add_attribute("new_liquidation_health", liquidation_health.to_string()))
 }
 
-// Query function to get locked collateral
-fn query_locked_collateral(deps: &Deps, collateral_address_to_query: String) -> StdResult<Binary> {
-    panic!("TODO: Implement this function!");
+// Function to set mintable health
+fn execute_set_mintable_health(
+    deps: DepsMut,
+    info: MessageInfo,
+    mintable_health: Decimal,
+) -> Result<Response, ContractError> {
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
+
+    if !admins.contains(&info.sender) {
+        return Err(ContractError::UnauthorizedUser {});
+    }
+
+    let current_liquidation_health = LIQUIDATION_HEALTH.load(deps.storage)?;
+
+    MINTABLE_HEALTH.update(
+        deps.storage,
+        |_current_mintable_health| -> Result<Decimal, ContractError> {
+            if mintable_health < current_liquidation_health {
+                return Err(ContractError::MintableHealthLowerThanLiquidationHealth {});
+            } else {
+                return Ok(mintable_health);
+            }
+        },
+    )?;
+
+    Ok(Response::new()
+        .add_attribute("action", "set_mintable_health")
+        .add_attribute("sender", info.sender)
+        .add_attribute("new_liquidation_health", mintable_health.to_string()))
 }
 
-// Query function to get stablecoin health
+fn execute_set_cw20_dira_contact_address(
+    deps: DepsMut,
+    cw20_dira_contract_address: Addr,
+) -> Result<Response, ContractError> {
+    if helper_is_cw20_contract(deps.as_ref(), &cw20_dira_contract_address) {
+        CW20_DIRA_CONTRACT_ADDRESS.save(deps.storage, &cw20_dira_contract_address)?;
+        return Ok(Response::new()
+            .add_attribute("action", "set_cw20_dira_contract_address")
+            .add_attribute("contract_address", cw20_dira_contract_address.into_string()));
+    } else {
+        return Err(ContractError::InvalidCW20ContractAddress {});
+    }
+}
+
+/// Query the price of the collateral in dirham
+fn query_collateral_price(deps: Deps) -> StdResult<Binary> {
+    let collateral_price = COLLATERAL_TOKEN_PRICE
+        .may_load(deps.storage)?
+        .ok_or_else(|| StdError::not_found("collateral_price"))?;
+
+    let response = CollateralPriceResponse { collateral_price };
+
+    to_json_binary(&response)
+}
+
+/// Query the locked collateral of a given wallet address.
+fn query_locked_collateral(deps: Deps, wallet_address_to_query: Addr) -> StdResult<Binary> {
+    let locked_collateral = LOCKED_COLLATERAL
+        .may_load(deps.storage, wallet_address_to_query.clone())?
+        .unwrap_or_default();
+
+    to_json_binary(&CollateralResponse {
+        collateral_locked: locked_collateral,
+    })
+}
+
+/// Query the amount of DIRA minted by a given wallet address.
+fn query_minted_dira(deps: Deps, wallet_address_to_query: Addr) -> StdResult<Binary> {
+    let dira_minted = MINTED_DIRA
+        .may_load(deps.storage, wallet_address_to_query.clone())?
+        .unwrap_or_default();
+
+    to_json_binary(&MintedDiraResponse { dira_minted })
+}
+
+/// Query the stablecoin health of a specific minter.
 fn query_stablecoin_health(
-    deps: &Deps,
-    stablecoin_minter_address_to_query: String,
+    deps: Deps,
+    stablecoin_minter_address_to_query: Addr,
 ) -> StdResult<Binary> {
-    panic!("TODO: Implement this function!");
+    let locked_collateral = LOCKED_COLLATERAL
+        .may_load(deps.storage, stablecoin_minter_address_to_query.clone())?
+        .unwrap_or_default();
+
+    let minted_dira = MINTED_DIRA
+        .may_load(deps.storage, stablecoin_minter_address_to_query.clone())?
+        .unwrap_or_default();
+
+    let collateral_price = COLLATERAL_TOKEN_PRICE.load(deps.storage)?;
+
+    let health =
+        helper_calculate_stablecoin_health(minted_dira, locked_collateral, collateral_price);
+
+    to_json_binary(&StablecoinHealthResponse { health })
 }
 
-/****
- * THIS IS THE SECTION FOR ALL TESTS
- ****/
+/// Query the current liquidation health threshold.
+fn query_liquidation_health(deps: Deps) -> StdResult<Binary> {
+    let liquidation_health = LIQUIDATION_HEALTH.load(deps.storage)?;
 
-//  #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use cosmwasm_std::testing::{mock_dependencies_with_balance, mock_env, mock_info};
-//     use cosmwasm_std::{coins, from_binary};
+    to_json_binary(&LiquidationHealthResponse { liquidation_health })
+}
 
-//     #[test]
-//     fn proper_initialization() {
-//         let mut deps = mock_dependencies_with_balance(&coins(1000, "umantra"));
+/// Query the current mintable health threshold.
+fn query_mintable_health(deps: Deps) -> StdResult<Binary> {
+    let mintable_health = MINTABLE_HEALTH.load(deps.storage)?;
 
-//         let msg = InstantiateMsg {
-//             liquidation_health: 1.5,
-//             allowed_collaterals: vec![
-//                 CollateralToken::NativeToken,
-//                 CollateralToken::CW20Token(Addr::unchecked("cw20_token")),
-//             ],
-//         };
-//         let info = mock_info("admin", &[]);
+    to_json_binary(&MintableHealthResponse { mintable_health })
+}
 
-//         let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
-//         assert_eq!(0, res.messages.len());
+/// Query the list of admin addresses.
+fn query_admin_addresses(deps: Deps) -> StdResult<Binary> {
+    let admin_addresses = ADMIN_ADDRESSES.load(deps.storage)?;
 
-//         let stored_admin = ADMIN_ADDRESS.load(&deps.storage).unwrap();
-//         assert_eq!(stored_admin, info.sender);
+    to_json_binary(&AdminAddressesResponse { admin_addresses })
+}
 
-//         let allowed_collaterals = ALLOWED_COLLATERALS.load(&deps.storage).unwrap();
-//         assert_eq!(
-//             allowed_collaterals,
-//             vec![
-//                 CollateralToken::NativeToken,
-//                 CollateralToken::CW20Token(Addr::unchecked("cw20_token")),
-//             ]
-//         );
-//     }
+/// Query the collateral token denom allowed by the contract.
+fn query_collateral_token_denom(deps: Deps) -> StdResult<Binary> {
+    let collateral_token_denom = COLLATERAL_TOKEN_DENOM.load(deps.storage)?;
 
-//     #[test]
-//     fn lock_native_token_collateral() {
-//         let mut deps = mock_dependencies_with_balance(&coins(1000, "umantra"));
+    to_json_binary(&CollateralTokenDenomResponse {
+        collateral_token_denom,
+    })
+}
 
-//         let msg = InstantiateMsg {
-//             liquidation_health: 1.5,
-//             allowed_collaterals: vec![CollateralToken::NativeToken],
-//         };
-//         let info = mock_info("admin", &[]);
-//         instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+/// Query the CW20 DIRA contract address set in the contract.
+fn query_cw20_dira_contract_address(deps: Deps) -> StdResult<Binary> {
+    let cw20_dira_contract_address = CW20_DIRA_CONTRACT_ADDRESS.may_load(deps.storage)?.clone();
 
-//         // Lock 500 umantra as collateral
-//         let lock_msg = ExecuteMsg::LockCollateralToken {
-//             collateral_token_to_lock: CollateralToken::NativeToken,
-//             collateral_amount_to_lock: 500,
-//         };
-//         let info = mock_info("user1", &coins(500, "umantra"));
-
-//         let res = execute(deps.as_mut(), mock_env(), info.clone(), lock_msg).unwrap();
-//         assert_eq!(1, res.messages.len());
-
-//         // Query locked collateral
-//         let query_msg = QueryMsg::QueryLockedCollateral {
-//             collateral_address_to_query: "user1".to_string(),
-//         };
-//         let res = query(deps.as_ref(), mock_env(), query_msg).unwrap();
-//         let locked_collateral: schemars::Map<CollateralToken, u128> = from_binary(&res).unwrap();
-//         assert_eq!(locked_collateral[&CollateralToken::NativeToken], 500);
-//     }
-
-//     #[test]
-//     fn unlock_native_token_collateral() {
-//         let mut deps = mock_dependencies_with_balance(&coins(1000, "umantra"));
-
-//         let msg = InstantiateMsg {
-//             liquidation_health: 1.5,
-//             allowed_collaterals: vec![CollateralToken::NativeToken],
-//         };
-//         let info = mock_info("admin", &[]);
-//         instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-//         // Lock 500 umantra as collateral
-//         let lock_msg = ExecuteMsg::LockCollateralToken {
-//             collateral_token_to_lock: CollateralToken::NativeToken,
-//             collateral_amount_to_lock: 500,
-//         };
-//         let info = mock_info("user1", &coins(500, "umantra"));
-//         execute(deps.as_mut(), mock_env(), info.clone(), lock_msg).unwrap();
-
-//         // Unlock 300 umantra
-//         let unlock_msg = ExecuteMsg::UnlockCollateralToken {
-//             collateral_token_to_unlock: CollateralToken::NativeToken,
-//             collateral_amount_to_unlock: 300,
-//         };
-//         let res = execute(deps.as_mut(), mock_env(), info.clone(), unlock_msg).unwrap();
-//         assert_eq!(1, res.messages.len());
-
-//         // Query locked collateral
-//         let query_msg = QueryMsg::QueryLockedCollateral {
-//             collateral_address_to_query: "user1".to_string(),
-//         };
-//         let res = query(deps.as_ref(), mock_env(), query_msg).unwrap();
-//         let locked_collateral: schemars::Map<CollateralToken, u128> = from_binary(&res).unwrap();
-//         assert_eq!(locked_collateral[&CollateralToken::NativeToken], 200);
-//     }
-
-//     #[test]
-//     fn lock_cw20_token_collateral() {
-//         let mut deps = mock_dependencies_with_balance(&coins(1000, "umantra"));
-
-//         let msg = InstantiateMsg {
-//             liquidation_health: 1.5,
-//             allowed_collaterals: vec![CollateralToken::CW20Token(Addr::unchecked("cw20_token"))],
-//         };
-//         let info = mock_info("admin", &[]);
-//         instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-//         // Lock 500 CW20 tokens as collateral
-//         let lock_msg = ExecuteMsg::LockCollateralToken {
-//             collateral_token_to_lock: CollateralToken::CW20Token(Addr::unchecked("cw20_token")),
-//             collateral_amount_to_lock: 500,
-//         };
-//         let info = mock_info("user1", &[]);
-
-//         let res = execute(deps.as_mut(), mock_env(), info.clone(), lock_msg).unwrap();
-//         assert_eq!(1, res.messages.len());
-
-//         // Query locked collateral
-//         let query_msg = QueryMsg::QueryLockedCollateral {
-//             collateral_address_to_query: "user1".to_string(),
-//         };
-//         let res = query(deps.as_ref(), mock_env(), query_msg).unwrap();
-//         let locked_collateral: schemars::Map<CollateralToken, u128> = from_binary(&res).unwrap();
-//         assert_eq!(
-//             locked_collateral[&CollateralToken::CW20Token(Addr::unchecked("cw20_token"))],
-//             500
-//         );
-//     }
-// }
- 
+    to_json_binary(&CW20DiraContractAddressResponse {
+        cw20_dira_contract_address,
+    })
+}
