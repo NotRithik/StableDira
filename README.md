@@ -1,4 +1,4 @@
-# Dira - Decentralized AED-Pegged Stablecoin
+# Dira - The ATOM-backed stablecoin for the AED
 
 Dira is a decentralized, overcollateralized stablecoin solution for AED (United Arab Emirates Dirham), inspired by MakerDAO for USD. Built on the Cosmos ecosystem, Dira allows users to mint AED stablecoins by locking ATOM as collateral, providing a stable on-chain value store and enabling seamless integration with the growing blockchain ecosystem in Dubai and beyond.
 
