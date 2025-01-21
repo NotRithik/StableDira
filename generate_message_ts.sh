@@ -31,8 +31,12 @@ for file in schema/*_msg.json; do
   # Extract the base filename without path or extension
   base_name=$(basename "$file" .json)
   
-  # Convert to PascalCase and add "Types.ts" suffix
-  pascal_case_name=$(to_pascal_case "$base_name")Types.ts
+  # # Convert to PascalCase and add "Types.ts" suffix
+  # pascal_case_name=$(to_pascal_case "$base_name")Types.ts
+
+  # Convert to PascalCase
+  pascal_case_name=$(to_pascal_case "$base_name").ts
+  
   
   # Run json2ts command
   npx json2ts -i "$file" -o "message_types/$pascal_case_name"
