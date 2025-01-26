@@ -1,14 +1,18 @@
-# Dira - The OM-backed stablecoin for the AED
+# Dira: The Decentralized AED Stablecoin - Smart Contract Repository
 
-Dira is a decentralized, overcollateralized stablecoin solution for AED (United Arab Emirates Dirham), inspired by MakerDAO for USD. Built on the Cosmos ecosystem, Dira allows users to mint AED stablecoins by locking OM as collateral, providing a stable on-chain value store and enabling seamless integration with the growing blockchain ecosystem in Dubai and beyond.
+This repository houses the **smart contract** for **Dira**, a decentralized, overcollateralized stablecoin pegged to the Emirati Dirham (AED). Built using CosmWasm in Rust and designed for the Cosmos ecosystem, Dira provides a robust and transparent smart contract to facilitate the minting of a digital AED currency, backed by the OM token.
+
+Dira's smart contract is the core of the Dira protocol, ensuring the stability, security, and decentralized nature of the AED stablecoin.  A user-friendly frontend application is also available (see below) to interact with this smart contract once deployed.
+
+---
 
 ## Table of Contents
 - [Overview](#overview)
 - [Features](#features)
-- [Getting Started](#getting-started)
-- [Smart Contract](#smart-contract)
-- [Frontend](#frontend)
-- [How It Works](#how-it-works)
+- [Getting Started - Smart Contract Development](#getting-started---smart-contract-development)
+- [Smart Contract Architecture](#smart-contract-architecture)
+- [Frontend Application](#frontend-application)
+- [How Dira Works - Smart Contract Logic](#how-dira-works---smart-contract-logic)
 - [Schema Generation](#schema-generation)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -18,153 +22,164 @@ Dira is a decentralized, overcollateralized stablecoin solution for AED (United 
 
 ## Overview
 
-Dira addresses the need for localized stablecoins in the Cosmos ecosystem. With the increasing adoption of tokenized real-world assets (RWAs) in Dubai, Dira provides a reliable and decentralized AED-pegged stablecoin, backed by OM as collateral.
+Dira addresses the growing demand for localized stablecoins within the Cosmos ecosystem, particularly in regions like Dubai where tokenized real-world assets (RWAs) are gaining traction. This smart contract implements the core logic for Dira, providing a reliable and decentralized AED-pegged stablecoin solution, with OM tokens serving as collateral.
 
-Dira will leverage IBC to integrate seamlessly with chains in the Cosmos ecosystem and increase liquidity for the AED. Dira-based liquidity pools will also be created to facilitate ForEx transactions. By leveraging staking and liquidity pool fees, Dira also drives utility and demand for OM.
+Dira is designed to leverage Inter-Blockchain Communication (IBC) for seamless integration with other Cosmos chains, enhancing liquidity for the AED stablecoin.  Liquidity pools for AED and other stablecoins are envisioned to facilitate efficient on-chain currency exchange.  Furthermore, Dira aims to drive utility and demand for the OM token through its protocol mechanisms.
 
 ---
 
 ## Features
 
-- **Decentralized & Overcollateralized**: Dira stablecoins are backed by OM, ensuring stability and security.
-- **Cross-Chain Integration**: Dira will leverage IBC to integrate with Neutron, Mantra, and other Cosmos chains.
-- **Liquidity Pools**: Enables AED/USD stablecoin liquidity pools for efficient on-chain currency conversion.
-- **Transparent Governance**: Admin functionalities are accessible only to approved wallets.
+The Dira smart contract incorporates the following key features:
+
+*   **Decentralized and Overcollateralized:** Dira stablecoins are fully backed by OM collateral, algorithmically ensuring stability and security through smart contract logic.
+*   **Cross-Chain Compatibility:**  Designed for future integration with Neutron, Mantra, and other Cosmos chains via IBC, enabling broader accessibility and utility.
+*   **Enables Liquidity Pools:**  Provides the foundation for the creation of AED/USD and other stablecoin liquidity pools, facilitating efficient on-chain foreign exchange.
+*   **Transparent Governance (Administered):**  Admin functionalities within the smart contract are designed to be executed by approved wallet addresses, ensuring transparent and controlled administrative actions.
+*   **Robust State Management:**  Secure on-chain storage of critical state variables, including collateral amounts, minted stablecoins, and authorized admin addresses.
+*   **Liquidation Mechanism:**  Implements automated liquidation processes to maintain collateral health and protocol solvency when collateral ratios fall below predefined thresholds.
+*   **Public Query Endpoints:** Offers comprehensive public query endpoints for transparent access to all contract states, including collateral levels, minted Dira supply, and collateral price information.
 
 ---
 
-## Getting Started
+## Getting Started - Smart Contract Development
 
-Follow these steps to get started with Dira:
+To begin development or contribute to the Dira smart contract, follow these steps:
 
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/NotRithik/StableDira.git
-   cd StableDira
-   ```
+1.  **Clone the Smart Contract Repository**
+    ```bash
+    git clone https://github.com/NotRithik/StableDira.git
+    cd StableDira
+    ```
 
-2. **Compile the Smart Contract**
-   Ensure you have [Rust](https://www.rust-lang.org/) and `wasm32-unknown-unknown` target installed.
-   ```bash
-   rustup target add wasm32-unknown-unknown
-   cargo build --target wasm32-unknown-unknown --release
-   ```
+2.  **Compile the Smart Contract**
+    Ensure you have [Rust](https://www.rust-lang.org/) installed and the `wasm32-unknown-unknown` target added to your Rust toolchain.
+    ```bash
+    rustup target add wasm32-unknown-unknown
+    cargo build --target wasm32-unknown-unknown --release
+    ```
+    For optimized production builds, you can utilize the Cosmos optimizer Docker image:
+    ```bash
+    docker run --rm -v "$(pwd)":/code --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry cosmwasm/optimizer:0.16.0
+    ```
 
-   Alternatively, you can use the Cosmos optimizer for a production-ready `.wasm` file:
-   ```bash
-   docker run --rm -v "$(pwd)":/code --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry cosmwasm/optimizer:0.16.0
-   ```
+3.  **Run Unit Tests**
+    Utilize `cw-multi-test` for comprehensive unit testing of the smart contract logic.
+    ```bash
+    cargo test -- --show-output
+    ```
 
-3. **Run Tests**
-   Use `cw-multi-test` to test the smart contract.
-   ```bash
-   cargo test -- --show-output
-   ```
-
-4. **Deploy the Contract**
-   Deploy the compiled `.wasm` file to a Cosmos chain.
-
----
-
-## Smart Contract
-
-The Dira smart contract is written in Rust using CosmWasm.
-
-- **State Management**:
-  - Collateral amounts, minted stablecoins, and admin addresses are stored securely on-chain.
-  - Supports liquidations when collateral health drops below the threshold.
-
-- **Query Functions**:
-  - Public query endpoints provide transparent access to all contract states, including locked collateral, minted Dira, collateral prices, and admin addresses.
-
-The smart contract repository: [Dira Smart Contract](https://github.com/NotRithik/StableDira).
+4.  **Deploy the Smart Contract**
+    The compiled `.wasm` file (located in the `target/wasm32-unknown-unknown/release/` directory) can be deployed to a compatible Cosmos chain, such as Mantra Chain's DuKong testnet.  Deployment requires appropriate chain tooling and configuration.
 
 ---
 
-## Frontend
+## Smart Contract Architecture
 
-A web interface has been deployed, and connected to the smart contract on the Mantra DuKong testnet for user interaction.
+The Dira smart contract, written in Rust using CosmWasm, is structured to ensure security, transparency, and efficiency.
 
-Currently, the following features have been implemented:
-- **Lock Collateral**: Users can lock OM to mint Dira stablecoins.
-- **Mint/Burn Stablecoins**: Intuitive interface to manage minted stablecoins.
-- **Liquidation**: View and liquidate unhealthy stablecoins.
+-   **State Management:** The contract meticulously manages its state on-chain, ensuring secure storage and retrieval of:
+    *   Collateral amounts locked by users.
+    *   The total supply of minted Dira stablecoins.
+    *   A list of authorized admin addresses with privileged functionalities.
+    *   Key protocol parameters such as liquidation and minting health thresholds.
 
-The following features are planned and will be implemented soon:
-- **Collateral Auction**: Participate in Collateral Auctions to buy liquidated assets.
-- **Oracle Price Feed**: Fetch collateral token's price directly from oracles on-chain.
-- **Governance Tokens**: Token-holders can vote on critical decisions regarding the Dira.
-- **Auto-Minting/Burning of Governance Tokens**: Automatically minting and burning governance tokens when required, by the smart contract.
-- **Fees**: Stability fees will be introduced.
+-   **Query Functions:**  Transparency is paramount. The contract exposes a suite of public query functions, enabling anyone to retrieve critical contract state information, including:
+    *   User-specific locked collateral amounts.
+    *   User-specific minted Dira balances.
+    *   Current collateral price as determined by the price oracle.
+    *   Protocol-wide liquidation and minting health parameters.
+    *   The list of authorized admin addresses.
+    *   The denomination of the collateral token.
+    *   The contract address of the CW20 Dira token.
 
-Live Preview: [Dira Frontend](https://dira-alpha.vercel.app/)
-Frontend Source Code: [Dira Frontend Repository](https://github.com/NotRithik/dira-frontend)
+The source code for the Dira Smart Contract is available in this repository: [Dira Smart Contract Repository](https://github.com/NotRithik/StableDira).
 
 ---
 
-## How It Works
+## Frontend Application
 
-1. **Lock Collateral**:
-   Users lock OM as collateral in the smart contract.
+A user-friendly web interface, the **Dira Frontend**, has been developed to facilitate interaction with the deployed Dira smart contract on the Mantra DuKong testnet.
 
-2. **Mint Stablecoins**:
-   The system calculates the user's collateral health, allowing them to mint stablecoins proportionally.
+The frontend currently implements the following core functionalities:
 
-3. **Burn Stablecoins**:
-   Users burn Dira to unlock collateral.
+*   **Lock Collateral:**  Allows users to lock OM tokens within the smart contract to mint Dira stablecoins.
+*   **Mint/Return Dira:** Provides an intuitive interface for users to mint Dira against their collateral and return Dira to unlock their OM.
+*   **Dashboard:**  Offers users a comprehensive dashboard to monitor their wallet connection status, account information, and relevant market data.
 
-4. **Liquidations**:
-   If a user's collateral health drops below the threshold, their collateral is liquidated by other users for rewards.
+Future frontend enhancements are planned, including features such as collateral auctions, oracle price feed visualization, and governance participation interfaces.
+
+Live Preview of the Dira Frontend: [Dira Frontend](https://dira-alpha.vercel.app/).
+Frontend Source Code Repository: [Dira Frontend Repository](https://github.com/NotRithik/dira-frontend)
+
+---
+
+## How Dira Works - Smart Contract Logic
+
+The Dira smart contract operates through the following core mechanisms:
+
+1.  **Collateral Locking:**
+    Users initiate the process by locking OM tokens within the smart contract as collateral. This collateral acts as backing for the Dira stablecoins they intend to mint.
+
+2.  **Stablecoin Minting:**
+    Upon locking collateral, the smart contract calculates the user's current collateral health ratio based on the prevailing collateral price.  Users are then permitted to mint Dira stablecoins proportionally to their locked collateral, ensuring overcollateralization.
+
+3.  **Stablecoin Burning (Returning):**
+    To unlock their OM collateral, users must return (burn) an equivalent amount of Dira stablecoins to the smart contract. This burn mechanism maintains the peg and overall supply of Dira.
+
+4.  **Liquidation Protocol:**
+    The smart contract incorporates a robust liquidation protocol to safeguard the system's solvency. If a user's collateral health ratio declines below a predefined liquidation threshold (due to fluctuations in collateral price), their collateral becomes eligible for liquidation. Other users can then liquidate undercollateralized positions, receiving a portion of the liquidated collateral as a reward, while ensuring the system remains solvent.
 
 ---
 
 ## Schema Generation
 
-The project provides a schema generation script to enforce message type correctness when integrating with frontends (e.g., TypeScript).
+To ensure type consistency and message integrity between the smart contract and external interfaces (such as the frontend), this project includes a schema generation script.
 
-Run the `generate_message_ts.sh` script to generate schema files for all messages and query responses:
+Execute the `generate_message_ts.sh` script to automatically generate TypeScript schema files for all smart contract messages and query responses:
 
 ```bash
 ./scripts/generate_message_ts.sh
 ```
 
-This ensures consistent JSON message passing from the frontend to the contract, improving type safety and reliability.
-
 ---
 
 ## Roadmap
 
-- **Phase 1**:
-  - Launch Dira on testnet.
-  - Develop user-friendly web interface.
-  - Conduct security audits.
+The Dira project follows a phased roadmap for development and expansion:
 
-- **Phase 2**:
-  - Integrate with Neutron and Mantra via IBC.
-  - Establish liquidity pools for AED/USD stablecoins.
+*   **Phase 1: Testnet Deployment and Core Functionality**
+    *   Successful deployment of the Dira smart contract on a testnet environment (Mantra DuKong).
+    *   Development and deployment of a user-friendly web interface (Dira Frontend).
+    *   Comprehensive security audits of the smart contract codebase.
 
-- **Phase 3**:
-  - Expand to other regional stablecoins (e.g., SGD).
-  - Develop a multi-currency stablecoin DEX.
+*   **Phase 2: Cross-Chain Integration and Liquidity Enhancement**
+    *   Implementation of Inter-Blockchain Communication (IBC) to enable Dira's integration with Neutron, Mantra, and potentially other Cosmos-based chains.
+    *   Establishment of liquidity pools for AED/USD stablecoins to facilitate on-chain currency exchange and increase Dira's utility.
+
+*   **Phase 3: Regional Expansion and Advanced Features**
+    *   Expansion of Dira to support additional regional stablecoins beyond AED, such as the Singapore Dollar (SGD).
+    *   Development of UI components for a multi-currency stablecoin Decentralized Exchange (DEX) interface.
+    *   Implementation of on-chain governance mechanisms for the Dira protocol, potentially including governance token integration.
 
 ---
 
 ## Contributing
 
-Contributions are welcome!
+We welcome contributions to the Dira smart contract project.
 
-1. Fork the repository.
-2. Create a feature branch.
-3. Submit a pull request with a clear description of the changes.
+1.  Fork this repository: [Dira Smart Contract Repository](https://github.com/NotRithik/StableDira).
+2.  Create a dedicated feature branch for your proposed changes.
+3.  Submit a pull request with a clear and detailed description of your contributions.
 
-For major changes, please open an issue first to discuss your ideas.
+For substantial changes or feature additions, it is recommended to open an issue first to discuss your ideas and approach with the project maintainers.
 
 ---
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+The Dira smart contract project is licensed under the [MIT License](LICENSE).  See the [LICENSE](LICENSE) file for full license details.
 
 ---
 
-**Dira - The OM-backed stablecoin for the Emirati Dirham. Secure, stable, and decentralized.**
+**Dira Smart Contract - The foundation for a decentralized and stable Emirati Dirham currency within the Cosmos ecosystem.**
