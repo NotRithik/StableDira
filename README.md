@@ -1,6 +1,6 @@
-# Dira - The ATOM-backed stablecoin for the AED
+# Dira - The OM-backed stablecoin for the AED
 
-Dira is a decentralized, overcollateralized stablecoin solution for AED (United Arab Emirates Dirham), inspired by MakerDAO for USD. Built on the Cosmos ecosystem, Dira allows users to mint AED stablecoins by locking ATOM as collateral, providing a stable on-chain value store and enabling seamless integration with the growing blockchain ecosystem in Dubai and beyond.
+Dira is a decentralized, overcollateralized stablecoin solution for AED (United Arab Emirates Dirham), inspired by MakerDAO for USD. Built on the Cosmos ecosystem, Dira allows users to mint AED stablecoins by locking OM as collateral, providing a stable on-chain value store and enabling seamless integration with the growing blockchain ecosystem in Dubai and beyond.
 
 ## Table of Contents
 - [Overview](#overview)
@@ -18,15 +18,15 @@ Dira is a decentralized, overcollateralized stablecoin solution for AED (United 
 
 ## Overview
 
-Dira addresses the need for localized stablecoins in the Cosmos ecosystem. With the increasing adoption of tokenized real-world assets (RWAs) in Dubai, Dira provides a reliable and decentralized AED-pegged stablecoin, backed by ATOM as collateral.
+Dira addresses the need for localized stablecoins in the Cosmos ecosystem. With the increasing adoption of tokenized real-world assets (RWAs) in Dubai, Dira provides a reliable and decentralized AED-pegged stablecoin, backed by OM as collateral.
 
-Dira will leverage IBC to integrate seamlessly with Cosmos chains, enhancing liquidity and enabling AED-based liquidity pools for cross-border transactions. By leveraging staking and liquidity pool fees, Dira also drives utility and demand for ATOM.
+Dira will leverage IBC to integrate seamlessly with chains in the Cosmos ecosystem and increase liquidity for the AED. Dira-based liquidity pools will also be created to facilitate ForEx transactions. By leveraging staking and liquidity pool fees, Dira also drives utility and demand for OM.
 
 ---
 
 ## Features
 
-- **Decentralized & Overcollateralized**: Dira stablecoins are backed by ATOM, ensuring stability and security.
+- **Decentralized & Overcollateralized**: Dira stablecoins are backed by OM, ensuring stability and security.
 - **Cross-Chain Integration**: Dira will leverage IBC to integrate with Neutron, Mantra, and other Cosmos chains.
 - **Liquidity Pools**: Enables AED/USD stablecoin liquidity pools for efficient on-chain currency conversion.
 - **Transparent Governance**: Admin functionalities are accessible only to approved wallets.
@@ -83,14 +83,21 @@ The smart contract repository: [Dira Smart Contract](https://github.com/NotRithi
 
 ## Frontend
 
-A web interface is under development for user interaction with the Dira ecosystem.
+A web interface has been deployed, and connected to the smart contract on the Mantra DuKong testnet for user interaction.
 
-- **Lock Collateral**: Users can lock ATOM to mint Dira stablecoins.
+Currently, the following features have been implemented:
+- **Lock Collateral**: Users can lock OM to mint Dira stablecoins.
 - **Mint/Burn Stablecoins**: Intuitive interface to manage minted stablecoins.
 - **Liquidation**: View and liquidate unhealthy stablecoins.
-- **Collateral Auction**: Participate in Collateral Auctions to buy liquidated assets.
 
-Live Preview: [Dira Frontend](https://xatrknaz5h7ejdov.vercel.app/)
+The following features are planned and will be implemented soon:
+- **Collateral Auction**: Participate in Collateral Auctions to buy liquidated assets.
+- **Oracle Price Feed**: Fetch collateral token's price directly from oracles on-chain.
+- **Governance Tokens**: Token-holders can vote on critical decisions regarding the Dira.
+- **Auto-Minting/Burning of Governance Tokens**: Automatically minting and burning governance tokens when required, by the smart contract.
+- **Fees**: Stability fees will be introduced.
+
+Live Preview: [Dira Frontend](https://dira-alpha.vercel.app/)
 Frontend Source Code: [Dira Frontend Repository](https://github.com/NotRithik/dira-frontend)
 
 ---
@@ -98,7 +105,7 @@ Frontend Source Code: [Dira Frontend Repository](https://github.com/NotRithik/di
 ## How It Works
 
 1. **Lock Collateral**:
-   Users lock ATOM as collateral in the smart contract.
+   Users lock OM as collateral in the smart contract.
 
 2. **Mint Stablecoins**:
    The system calculates the user's collateral health, allowing them to mint stablecoins proportionally.
@@ -160,4 +167,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ---
 
-**Dira - The ATOM-backed stablecoin for the Emirati Dirham. Secure, stable, and decentralized.**
+**Dira - The OM-backed stablecoin for the Emirati Dirham. Secure, stable, and decentralized.**
