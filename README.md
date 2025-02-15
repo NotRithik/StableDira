@@ -5,7 +5,7 @@ This repository houses the **smart contract** for **Dira**, a decentralized, ove
 Dira's smart contract is the core of the Dira protocol, ensuring the stability, security, and decentralized nature of the AED stablecoin.  A user-friendly frontend application is also available (see below) to interact with this smart contract once deployed.
 
 ---
-
+ 
 ## Table of Contents
 - [Overview](#overview)
 - [Features](#features)
