@@ -33,7 +33,7 @@ Dira is designed to leverage Inter-Blockchain Communication (IBC) for seamless i
 The Dira smart contract incorporates the following key features:
 
 *   **Decentralized and Overcollateralized:** Dira stablecoins are fully backed by OM collateral, algorithmically ensuring stability and security through smart contract logic.
-*   **Cross-Chain Compatibility:**  Designed for future integration with Neutron, Mantra, and other Cosmos chains via IBC, enabling broader accessibility and utility.
+*   **Cross-Chain Compatibility:**  Designed for future integration with Noble, Mantra, and other Cosmos chains via IBC, enabling broader accessibility and utility.
 *   **Enables Liquidity Pools:**  Provides the foundation for the creation of AED/USD and other stablecoin liquidity pools, facilitating efficient on-chain foreign exchange.
 *   **Transparent Governance (Administered):**  Admin functionalities within the smart contract are designed to be executed by approved wallet addresses, ensuring transparent and controlled administrative actions.
 *   **Robust State Management:**  Secure on-chain storage of critical state variables, including collateral amounts, minted stablecoins, and authorized admin addresses.
@@ -154,7 +154,7 @@ The Dira project follows a phased roadmap for development and expansion:
     *   Comprehensive security audits of the smart contract codebase.
 
 *   **Phase 2: Cross-Chain Integration and Liquidity Enhancement**
-    *   Implementation of Inter-Blockchain Communication (IBC) to enable Dira's integration with Neutron, Mantra, and potentially other Cosmos-based chains.
+    *   Implementation of Inter-Blockchain Communication (IBC) to enable Dira's integration with Noble, Mantra, and potentially other Cosmos-based chains.
     *   Establishment of liquidity pools for AED/USD stablecoins to facilitate on-chain currency exchange and increase Dira's utility.
 
 *   **Phase 3: Regional Expansion and Advanced Features**
