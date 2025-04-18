@@ -600,6 +600,10 @@ fn execute_set_cw20_dira_contact_address(
     deps: DepsMut,
     cw20_dira_contract_address: Addr,
 ) -> Result<Response, ContractError> {
+    if !admins.contains(&info.sender) {
+        return Err(ContractError::UnauthorizedUser {});
+    }
+
     if helper_is_cw20_contract(deps.as_ref(), &cw20_dira_contract_address) {
         CW20_DIRA_CONTRACT_ADDRESS.save(deps.storage, &cw20_dira_contract_address)?;
         return Ok(Response::new()

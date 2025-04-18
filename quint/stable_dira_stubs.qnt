@@ -417,7 +417,6 @@ module stable_dira {
   }
 
   pure def set_cw20_dira_contract_address(state: ContractState, info: MessageInfo, cw20_dira_contract_address: Addr): (Result[Response, ContractError], ContractState) = {
-      // FIXME: Rust code is missing the admin check here! Adding it to the model for correctness.
       if (not(state.admin_addresses.contains(info.sender))) {
           (Err("UnauthorizedUser"), state)
       } else if (not(is_cw20_contract(cw20_dira_contract_address))) {
