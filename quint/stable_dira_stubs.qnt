@@ -614,4 +614,91 @@ module stable_dira {
     }
   }
 
+    // --- Invariants ---
+
+  // Collateral locked by any user should never be negative
+  invariant collateral_non_negative =
+    state.locked_collateral.keys().forall(addr =>
+      state.locked_collateral.get(addr) >= 0
+    )
+
+  // Dira minted by any user should never be negative
+  invariant minted_dira_non_negative =
+    state.minted_dira.keys().forall(addr =>
+      state.minted_dira.get(addr) >= 0
+    )
+
+  // Health thresholds should always be positive (as checked in instantiate/set)
+  invariant health_thresholds_positive =
+    state.liquidation_health > 0 and state.mintable_health > 0
+
+  // Mintable health should always be greater than or equal to liquidation health
+  invariant health_threshold_ordering =
+    state.mintable_health >= state.liquidation_health
+
+  // Collateral price, once set by an admin, should be positive
+  // Note: it starts at 0 in the model's init_contract_state before being set.
+  invariant collateral_price_positive_when_set =
+    // This invariant only makes sense *after* the price has been set initially.
+    // We can express this by checking if any collateral is locked OR dira is minted.
+    (state.locked_collateral.keys().size() > 0 or state.minted_dira.keys().size() > 0) implies
+      state.collateral_token_price > 0
+
+  // The list of admins should never be empty after initialization
+  invariant admin_list_non_empty =
+    state.admin_addresses.length() > 0
+
+  // A user's minted amount should never exceed the maximum they *could* mint
+  // with their current collateral and the current parameters.
+  // This implicitly checks they are not below the mintable health ratio *if they were to mint more*.
+  invariant minting_within_limits =
+    // Only check if the price is set (positive) and mintable health is positive
+    (state.collateral_token_price > 0 and state.mintable_health > 0) implies
+      state.minted_dira.keys().forall(addr =>
+        state.minted_dira.get(addr) <=
+          calculate_max_mintable_dira(
+            state.locked_collateral.getOrElse(addr, 0), // Use 0 if no collateral entry exists
+            state.collateral_token_price,
+            state.mintable_health
+          )
+      )
+
+  // The total native collateral tokens held *by the contract* in the bank
+  // should exactly equal the sum of collateral recorded as locked in the contract state.
+  invariant total_collateral_matches_bank_simplified = {
+  // Step 1: Get the contract's balance map
+  val contract_balances_map = bank.get(CONTRACT_ADDRESS)
+  // Step 2: Get the specific collateral balance from that map
+  val contract_collateral_balance = contract_balances_map.getOrElse(state.collateral_token_denom, 0)
+  // Step 3: Calculate the sum of locked collateral from the state
+  val total_locked_in_state = state.locked_collateral.values().fold(0, (sum, amount) => sum + amount)
+  // Step 4: Compare
+  contract_collateral_balance == total_locked_in_state
+}
+
+  // Collateral denom should not be empty after init (checked in instantiate)
+  invariant collateral_denom_set = state.collateral_token_denom != ""
+
+  // If the CW20 address is set, it should remain the same (no execute message changes it post-instantiate/set)
+  // This requires comparing current state to previous, better for temporal logic,
+  // but we can state it shouldn't become None once set.
+  // invariant cw20_address_stable_once_set = ??? (Hard to express simply)
+
+
+  // --- Example: Invariant likely to FAIL without full logic ---
+  // This invariant checks if any user *currently* has health below the liquidation threshold.
+  // It WILL likely fail after a price drop action but *before* a liquidate action runs.
+  // Use this carefully to understand state transitions.
+  /*
+  invariant health_above_liquidation_threshold =
+    (state.collateral_token_price > 0) implies
+      state.minted_dira.keys().forall(addr =>
+         calculate_stablecoin_health(
+            state.minted_dira.get(addr),
+            state.locked_collateral.getOrElse(addr, 0),
+            state.collateral_token_price
+         ) >= state.liquidation_health
+      )
+  */
+
 } // End of module stable_dira
