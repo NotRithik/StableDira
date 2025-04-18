@@ -9,12 +9,13 @@ Directory Structure:
 ├── README.md
 ├── generate_message_ts.sh
 ├── optimize.sh
-│       ├── quint/lib/BoundedUInt.qnt
-│       ├── quint/lib/bank.qnt
-│       ├── quint/lib/basicSpells.qnt
-│       ├── quint/lib/cw_types.qnt
-│       ├── quint/lib/cw_utils.qnt
-│       └── quint/lib/messaging.qnt
+│   │   ├── quint/lib/BoundedUInt.qnt
+│   │   ├── quint/lib/bank.qnt
+│   │   ├── quint/lib/basicSpells.qnt
+│   │   ├── quint/lib/cw_types.qnt
+│   │   ├── quint/lib/cw_utils.qnt
+│   │   └── quint/lib/messaging.qnt
+│   └── quint/stable_dira_stubs.qnt
 │   ├── src/contract.rs
 │   ├── src/error.rs
 │   ├── src/lib.rs
@@ -114,17 +115,21 @@ SOFTWARE.
 
 Contents of README.md:
 ```
-# Dira - The ATOM-backed stablecoin for the AED
+# Dira: The Decentralized AED Stablecoin - Smart Contract Repository
 
-Dira is a decentralized, overcollateralized stablecoin solution for AED (United Arab Emirates Dirham), inspired by MakerDAO for USD. Built on the Cosmos ecosystem, Dira allows users to mint AED stablecoins by locking ATOM as collateral, providing a stable on-chain value store and enabling seamless integration with the growing blockchain ecosystem in Dubai and beyond.
+This repository houses the **smart contract** for **Dira**, a decentralized, overcollateralized stablecoin pegged to the Emirati Dirham (AED). Built using CosmWasm in Rust and designed for the Cosmos ecosystem, Dira provides a robust and transparent smart contract to facilitate the minting of a digital AED currency, backed by the OM token.
 
+Dira's smart contract is the core of the Dira protocol, ensuring the stability, security, and decentralized nature of the AED stablecoin.  A user-friendly frontend application is also available (see below) to interact with this smart contract once deployed.
+
+---
+ 
 ## Table of Contents
 - [Overview](#overview)
 - [Features](#features)
-- [Getting Started](#getting-started)
-- [Smart Contract](#smart-contract)
-- [Frontend](#frontend)
-- [How It Works](#how-it-works)
+- [Getting Started - Smart Contract Development](#getting-started---smart-contract-development)
+- [Smart Contract Architecture](#smart-contract-architecture)
+- [Frontend Application](#frontend-application)
+- [How Dira Works - Smart Contract Logic](#how-dira-works---smart-contract-logic)
 - [Schema Generation](#schema-generation)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -134,149 +139,167 @@ Dira is a decentralized, overcollateralized stablecoin solution for AED (United 
 
 ## Overview
 
-Dira addresses the need for localized stablecoins in the Cosmos ecosystem. With the increasing adoption of tokenized real-world assets (RWAs) in Dubai, Dira provides a reliable and decentralized AED-pegged stablecoin, backed by ATOM as collateral.
+Dira addresses the growing demand for localized stablecoins within the Cosmos ecosystem, particularly in regions like Dubai where tokenized real-world assets (RWAs) are gaining traction. This smart contract implements the core logic for Dira, providing a reliable and decentralized AED-pegged stablecoin solution, with OM tokens serving as collateral.
 
-Dira will leverage IBC to integrate seamlessly with Cosmos chains, enhancing liquidity and enabling AED-based liquidity pools for cross-border transactions. By leveraging staking and liquidity pool fees, Dira also drives utility and demand for ATOM.
+Dira is designed to leverage Inter-Blockchain Communication (IBC) for seamless integration with other Cosmos chains, enhancing liquidity for the AED stablecoin.  Liquidity pools for AED and other stablecoins are envisioned to facilitate efficient on-chain currency exchange.  Furthermore, Dira aims to drive utility and demand for the OM token through its protocol mechanisms.
 
 ---
 
 ## Features
 
-- **Decentralized & Overcollateralized**: Dira stablecoins are backed by ATOM, ensuring stability and security.
-- **Cross-Chain Integration**: Dira will leverage IBC to integrate with Neutron, Mantra, and other Cosmos chains.
-- **Liquidity Pools**: Enables AED/USD stablecoin liquidity pools for efficient on-chain currency conversion.
-- **Transparent Governance**: Admin functionalities are accessible only to approved wallets.
+The Dira smart contract incorporates the following key features:
+
+*   **Decentralized and Overcollateralized:** Dira stablecoins are fully backed by OM collateral, algorithmically ensuring stability and security through smart contract logic.
+*   **Cross-Chain Compatibility:**  Designed for future integration with Noble, Mantra, and other Cosmos chains via IBC, enabling broader accessibility and utility.
+*   **Enables Liquidity Pools:**  Provides the foundation for the creation of AED/USD and other stablecoin liquidity pools, facilitating efficient on-chain foreign exchange.
+*   **Transparent Governance (Administered):**  Admin functionalities within the smart contract are designed to be executed by approved wallet addresses, ensuring transparent and controlled administrative actions.
+*   **Robust State Management:**  Secure on-chain storage of critical state variables, including collateral amounts, minted stablecoins, and authorized admin addresses.
+*   **Liquidation Mechanism:**  Implements automated liquidation processes to maintain collateral health and protocol solvency when collateral ratios fall below predefined thresholds.
+*   **Public Query Endpoints:** Offers comprehensive public query endpoints for transparent access to all contract states, including collateral levels, minted Dira supply, and collateral price information.
 
 ---
 
-## Getting Started
+## Getting Started - Smart Contract Development
 
-Follow these steps to get started with Dira:
+To begin development or contribute to the Dira smart contract, follow these steps:
 
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/NotRithik/StableDira.git
-   cd StableDira
-   ```
+1.  **Clone the Smart Contract Repository**
+    ```bash
+    git clone https://github.com/NotRithik/StableDira.git
+    cd StableDira
+    ```
 
-2. **Compile the Smart Contract**
-   Ensure you have [Rust](https://www.rust-lang.org/) and `wasm32-unknown-unknown` target installed.
-   ```bash
-   rustup target add wasm32-unknown-unknown
-   cargo build --target wasm32-unknown-unknown --release
-   ```
+2.  **Compile the Smart Contract**
+    Ensure you have [Rust](https://www.rust-lang.org/) installed and the `wasm32-unknown-unknown` target added to your Rust toolchain.
+    ```bash
+    rustup target add wasm32-unknown-unknown
+    cargo build --target wasm32-unknown-unknown --release
+    ```
+    For optimized production builds, you can utilize the Cosmos optimizer Docker image:
+    ```bash
+    docker run --rm -v "$(pwd)":/code --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry cosmwasm/optimizer:0.16.0
+    ```
 
-   Alternatively, you can use the Cosmos optimizer for a production-ready `.wasm` file:
-   ```bash
-   docker run --rm -v "$(pwd)":/code --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry cosmwasm/optimizer:0.16.0
-   ```
+3.  **Run Unit Tests**
+    Utilize `cw-multi-test` for comprehensive unit testing of the smart contract logic.
+    ```bash
+    cargo test -- --show-output
+    ```
 
-3. **Run Tests**
-   Use `cw-multi-test` to test the smart contract.
-   ```bash
-   cargo test -- --show-output
-   ```
-
-4. **Deploy the Contract**
-   Deploy the compiled `.wasm` file to a Cosmos chain.
-
----
-
-## Smart Contract
-
-The Dira smart contract is written in Rust using CosmWasm.
-
-- **State Management**:
-  - Collateral amounts, minted stablecoins, and admin addresses are stored securely on-chain.
-  - Supports liquidations when collateral health drops below the threshold.
-
-- **Query Functions**:
-  - Public query endpoints provide transparent access to all contract states, including locked collateral, minted Dira, collateral prices, and admin addresses.
-
-The smart contract repository: [Dira Smart Contract](https://github.com/NotRithik/StableDira).
+4.  **Deploy the Smart Contract**
+    The compiled `.wasm` file (located in the `target/wasm32-unknown-unknown/release/` directory) can be deployed to a compatible Cosmos chain, such as Mantra Chain's DuKong testnet.  Deployment requires appropriate chain tooling and configuration.
 
 ---
 
-## Frontend
+## Smart Contract Architecture
 
-A web interface is under development for user interaction with the Dira ecosystem.
+The Dira smart contract, written in Rust using CosmWasm, is structured to ensure security, transparency, and efficiency.
 
-- **Lock Collateral**: Users can lock ATOM to mint Dira stablecoins.
-- **Mint/Burn Stablecoins**: Intuitive interface to manage minted stablecoins.
-- **Liquidation**: View and liquidate unhealthy stablecoins.
-- **Collateral Auction**: Participate in Collateral Auctions to buy liquidated assets.
+-   **State Management:** The contract meticulously manages its state on-chain, ensuring secure storage and retrieval of:
+    *   Collateral amounts locked by users.
+    *   The total supply of minted Dira stablecoins.
+    *   A list of authorized admin addresses with privileged functionalities.
+    *   Key protocol parameters such as liquidation and minting health thresholds.
 
-Live Preview: [Dira Frontend](https://xatrknaz5h7ejdov.vercel.app/)
-Frontend Source Code: [Dira Frontend Repository](https://github.com/NotRithik/dira-frontend)
+-   **Query Functions:**  Transparency is paramount. The contract exposes a suite of public query functions, enabling anyone to retrieve critical contract state information, including:
+    *   User-specific locked collateral amounts.
+    *   User-specific minted Dira balances.
+    *   Current collateral price as determined by the price oracle.
+    *   Protocol-wide liquidation and minting health parameters.
+    *   The list of authorized admin addresses.
+    *   The denomination of the collateral token.
+    *   The contract address of the CW20 Dira token.
+
+The source code for the Dira Smart Contract is available in this repository: [Dira Smart Contract Repository](https://github.com/NotRithik/StableDira).
 
 ---
 
-## How It Works
+## Frontend Application
 
-1. **Lock Collateral**:
-   Users lock ATOM as collateral in the smart contract.
+A user-friendly web interface, the **Dira Frontend**, has been developed to facilitate interaction with the deployed Dira smart contract on the Mantra DuKong testnet.
 
-2. **Mint Stablecoins**:
-   The system calculates the user's collateral health, allowing them to mint stablecoins proportionally.
+The frontend currently implements the following core functionalities:
 
-3. **Burn Stablecoins**:
-   Users burn Dira to unlock collateral.
+*   **Lock Collateral:**  Allows users to lock OM tokens within the smart contract to mint Dira stablecoins.
+*   **Mint/Return Dira:** Provides an intuitive interface for users to mint Dira against their collateral and return Dira to unlock their OM.
+*   **Dashboard:**  Offers users a comprehensive dashboard to monitor their wallet connection status, account information, and relevant market data.
 
-4. **Liquidations**:
-   If a user's collateral health drops below the threshold, their collateral is liquidated by other users for rewards.
+Future frontend enhancements are planned, including features such as collateral auctions, oracle price feed visualization, and governance participation interfaces.
+
+Live Preview of the Dira Frontend: [Dira Frontend](https://dira-alpha.vercel.app/).
+Frontend Source Code Repository: [Dira Frontend Repository](https://github.com/NotRithik/dira-frontend)
+
+---
+
+## How Dira Works - Smart Contract Logic
+
+The Dira smart contract operates through the following core mechanisms:
+
+1.  **Collateral Locking:**
+    Users initiate the process by locking OM tokens within the smart contract as collateral. This collateral acts as backing for the Dira stablecoins they intend to mint.
+
+2.  **Stablecoin Minting:**
+    Upon locking collateral, the smart contract calculates the user's current collateral health ratio based on the prevailing collateral price.  Users are then permitted to mint Dira stablecoins proportionally to their locked collateral, ensuring overcollateralization.
+
+3.  **Stablecoin Burning (Returning):**
+    To unlock their OM collateral, users must return (burn) an equivalent amount of Dira stablecoins to the smart contract. This burn mechanism maintains the peg and overall supply of Dira.
+
+4.  **Liquidation Protocol:**
+    The smart contract incorporates a robust liquidation protocol to safeguard the system's solvency. If a user's collateral health ratio declines below a predefined liquidation threshold (due to fluctuations in collateral price), their collateral becomes eligible for liquidation. Other users can then liquidate undercollateralized positions, receiving a portion of the liquidated collateral as a reward, while ensuring the system remains solvent.
 
 ---
 
 ## Schema Generation
 
-The project provides a schema generation script to enforce message type correctness when integrating with frontends (e.g., TypeScript).
+To ensure type consistency and message integrity between the smart contract and external interfaces (such as the frontend), this project includes a schema generation script.
 
-Run the `generate_message_ts.sh` script to generate schema files for all messages and query responses:
+Execute the `generate_message_ts.sh` script to automatically generate TypeScript schema files for all smart contract messages and query responses:
 
 ```bash
 ./scripts/generate_message_ts.sh
 ```
 
-This ensures consistent JSON message passing from the frontend to the contract, improving type safety and reliability.
-
 ---
 
 ## Roadmap
 
-- **Phase 1**:
-  - Launch Dira on testnet.
-  - Develop user-friendly web interface.
-  - Conduct security audits.
+The Dira project follows a phased roadmap for development and expansion:
 
-- **Phase 2**:
-  - Integrate with Neutron and Mantra via IBC.
-  - Establish liquidity pools for AED/USD stablecoins.
+*   **Phase 1: Testnet Deployment and Core Functionality**
+    *   Successful deployment of the Dira smart contract on a testnet environment (Mantra DuKong).
+    *   Development and deployment of a user-friendly web interface (Dira Frontend).
+    *   Comprehensive security audits of the smart contract codebase.
 
-- **Phase 3**:
-  - Expand to other regional stablecoins (e.g., SGD).
-  - Develop a multi-currency stablecoin DEX.
+*   **Phase 2: Cross-Chain Integration and Liquidity Enhancement**
+    *   Implementation of Inter-Blockchain Communication (IBC) to enable Dira's integration with Noble, Mantra, and potentially other Cosmos-based chains.
+    *   Establishment of liquidity pools for AED/USD stablecoins to facilitate on-chain currency exchange and increase Dira's utility.
+
+*   **Phase 3: Regional Expansion and Advanced Features**
+    *   Expansion of Dira to support additional regional stablecoins beyond AED, such as the Singapore Dollar (SGD).
+    *   Development of UI components for a multi-currency stablecoin Decentralized Exchange (DEX) interface.
+    *   Implementation of on-chain governance mechanisms for the Dira protocol, potentially including governance token integration.
 
 ---
 
 ## Contributing
 
-Contributions are welcome!
+We welcome contributions to the Dira smart contract project.
 
-1. Fork the repository.
-2. Create a feature branch.
-3. Submit a pull request with a clear description of the changes.
+1.  Fork this repository: [Dira Smart Contract Repository](https://github.com/NotRithik/StableDira).
+2.  Create a dedicated feature branch for your proposed changes.
+3.  Submit a pull request with a clear and detailed description of your contributions.
 
-For major changes, please open an issue first to discuss your ideas.
+For substantial changes or feature additions, it is recommended to open an issue first to discuss your ideas and approach with the project maintainers.
 
 ---
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+The Dira smart contract project is licensed under the [MIT License](LICENSE).  See the [LICENSE](LICENSE) file for full license details.
 
 ---
 
-**Dira - The ATOM-backed stablecoin for the Emirati Dirham. Secure, stable, and decentralized.**
+**Dira Smart Contract - The foundation for a decentralized and stable Emirati Dirham currency within the Cosmos ecosystem.**
 
 ```
 
@@ -1016,6 +1039,330 @@ fn test_query_functions() {
     );
 }
 
+```
+
+Contents of quint/stable_dira_stubs.qnt:
+```
+// stable_dira_stubs.qnt
+// -*- mode: Bluespec; -*-
+module stable_dira {
+  
+  import basicSpells.* from "./lib/basicSpells"
+  import cw_types.* from "./lib/cw_types"
+  import cw_utils.* from "./lib/cw_utils"
+  import messaging.* from "./lib/messaging"
+  import bank from "./lib/bank"
+
+  
+  var contract_state: ContractState
+  var result: Result
+  var bank: bank::Bank
+  var time: int
+
+  
+  pure val CONTRACT_ADDRESS = "contract0"
+
+  
+  pure val ADDRESSES = Set("sender1", "sender2", "sender3", CONTRACT_ADDRESS)
+  // Assuming 'uatom' is the primary collateral denom based on tests/usage
+  pure val DENOMS = Set("uatom", "dira_cw20_placeholder") // Added placeholder for CW20 Dira
+  pure val MAX_AMOUNT = 1000000 // Increased based on typical token amounts
+
+  // Types translated from src/msg.rs and src/state.rs
+  type InstantiateMsg = {
+    liquidation_health: int, // Decimal -> int
+    mintable_health: int,    // Decimal -> int
+    collateral_token_denom: str,
+    cw20_dira_contract_address: Option[Addr],
+  }
+
+  type ExecuteMsg =
+    | ExecuteMsg_LockCollateral
+    | ExecuteMsg_UnlockCollateral({ collateral_amount_to_unlock: int }) // Decimal -> int
+    | ExecuteMsg_MintDira({ dira_to_mint: int }) // Decimal -> int
+    | ExecuteMsg_BurnDira({ dira_to_burn: int })   // Decimal -> int
+    | ExecuteMsg_LiquidateStablecoins({ wallet_address_to_liquidate: Addr })
+    | ExecuteMsg_SetCollateralPriceInDirham({ collateral_price_in_dirham: int }) // Decimal -> int
+    | ExecuteMsg_SetLiquidationHealth({ liquidation_health: int }) // Decimal -> int
+    | ExecuteMsg_SetMintableHealth({ mintable_health: int })       // Decimal -> int
+    | ExecuteMsg_SetCW20DiraContractAddress({ cw20_dira_contract_address: Addr })
+
+  // --- Function Stubs ---
+
+  pure def instantiate(state: ContractState, _env: Env, info: MessageInfo, msg: InstantiateMsg): (Result[Response, ContractError], ContractState) = {
+    // TODO: Update body based on src/contract.rs:instantiate
+    (Ok(Response_new.add_attribute("action", FromStr("instantiate"))), state)
+  }
+
+  pure def execute(state: ContractState, _env: Env, info: MessageInfo, msg: ExecuteMsg): (Result[Response, ContractError], ContractState) = match msg {
+    | ExecuteMsg_LockCollateral(__r) => lock_collateral(state, info)
+    | ExecuteMsg_UnlockCollateral(__r) => unlock_collateral(state, info, __r.collateral_amount_to_unlock)
+    | ExecuteMsg_MintDira(__r) => mint_dira(state, info, __r.dira_to_mint)
+    | ExecuteMsg_BurnDira(__r) => burn_dira(state, info, __r.dira_to_burn)
+    | ExecuteMsg_LiquidateStablecoins(__r) => liquidate_stablecoins(state, info, __r.wallet_address_to_liquidate)
+    | ExecuteMsg_SetCollateralPriceInDirham(__r) => set_collateral_price_in_dirham(state, info, __r.collateral_price_in_dirham)
+    | ExecuteMsg_SetLiquidationHealth(__r) => set_liquidation_health(state, info, __r.liquidation_health)
+    | ExecuteMsg_SetMintableHealth(__r) => set_mintable_health(state, info, __r.mintable_health)
+    | ExecuteMsg_SetCW20DiraContractAddress(__r) => set_cw20_dira_contract_address(state, info, __r.cw20_dira_contract_address)
+  }
+
+  pure def lock_collateral(state: ContractState, info: MessageInfo): (Result[Response, ContractError], ContractState) = {
+    // TODO: Update body based on src/contract.rs:execute_lock_collateral
+    (Ok(Response_new), state)
+  }
+                            
+  action lock_collateral_action = {
+    // TODO: Change next line according to fund expectations (expecting collateral token denom)
+    pure val max_funds = MAX_AMOUNT 
+    
+    pure val message: ExecuteMsg = ExecuteMsg_LockCollateral
+    execute_message(message, max_funds)
+  }
+
+  pure def unlock_collateral(state: ContractState, info: MessageInfo, collateral_amount_to_unlock: int): (Result[Response, ContractError], ContractState) = {
+    // TODO: Update body based on src/contract.rs:execute_unlock_collateral
+    (Ok(Response_new), state)
+  }
+                            
+  action unlock_collateral_action = {
+    // TODO: Change next line according to fund expectations (usually 0 for unlock)
+    pure val max_funds = 0 
+    nondet message_collateral_amount_to_unlock: int = 0.to(MAX_AMOUNT).oneOf()
+    pure val message: ExecuteMsg = ExecuteMsg_UnlockCollateral({ collateral_amount_to_unlock: message_collateral_amount_to_unlock })
+    execute_message(message, max_funds)
+  }
+
+  pure def mint_dira(state: ContractState, info: MessageInfo, dira_to_mint: int): (Result[Response, ContractError], ContractState) = {
+    // TODO: Update body based on src/contract.rs:execute_mint_dira
+    (Ok(Response_new), state)
+  }
+                            
+  action mint_dira_action = {
+    // TODO: Change next line according to fund expectations (usually 0 for mint)
+    pure val max_funds = 0
+    nondet message_dira_to_mint: int = 0.to(MAX_AMOUNT).oneOf()
+    pure val message: ExecuteMsg = ExecuteMsg_MintDira({ dira_to_mint: message_dira_to_mint })
+    execute_message(message, max_funds)
+  }
+
+  pure def burn_dira(state: ContractState, info: MessageInfo, dira_to_burn: int): (Result[Response, ContractError], ContractState) = {
+    // TODO: Update body based on src/contract.rs:execute_burn_dira
+    (Ok(Response_new), state)
+  }
+                            
+  action burn_dira_action = {
+    // TODO: Change next line according to fund expectations (expecting CW20 transfer/burn approval)
+    pure val max_funds = 0 
+    nondet message_dira_to_burn: int = 0.to(MAX_AMOUNT).oneOf()
+    pure val message: ExecuteMsg = ExecuteMsg_BurnDira({ dira_to_burn: message_dira_to_burn })
+    execute_message(message, max_funds)
+  }
+
+  pure def liquidate_stablecoins(state: ContractState, info: MessageInfo, wallet_address_to_liquidate: Addr): (Result[Response, ContractError], ContractState) = {
+    // TODO: Update body based on src/contract.rs:execute_liquidate_stablecoin_minter
+    (Ok(Response_new), state)
+  }
+                            
+  action liquidate_stablecoins_action = {
+    // TODO: Change next line according to fund expectations (usually 0)
+    pure val max_funds = 0
+    nondet message_wallet_address_to_liquidate: Addr = ADDRESSES.oneOf() // Choose an address to liquidate
+    pure val message: ExecuteMsg = ExecuteMsg_LiquidateStablecoins({ wallet_address_to_liquidate: message_wallet_address_to_liquidate })
+    execute_message(message, max_funds)
+  }
+
+  pure def set_collateral_price_in_dirham(state: ContractState, info: MessageInfo, collateral_price_in_dirham: int): (Result[Response, ContractError], ContractState) = {
+    // TODO: Update body based on src/contract.rs:execute_set_collateral_price_in_dirham
+    (Ok(Response_new), state)
+  }
+                            
+  action set_collateral_price_in_dirham_action = {
+    // TODO: Change next line according to fund expectations (0 for admin actions)
+    pure val max_funds = 0
+    nondet message_collateral_price_in_dirham: int = 1.to(MAX_AMOUNT * 100).oneOf() // Price > 0
+    pure val message: ExecuteMsg = ExecuteMsg_SetCollateralPriceInDirham({ collateral_price_in_dirham: message_collateral_price_in_dirham })
+    execute_message(message, max_funds)
+  }
+
+  pure def set_liquidation_health(state: ContractState, info: MessageInfo, liquidation_health: int): (Result[Response, ContractError], ContractState) = {
+    // TODO: Update body based on src/contract.rs:execute_set_liquidation_health
+    (Ok(Response_new), state)
+  }
+                            
+  action set_liquidation_health_action = {
+    // TODO: Change next line according to fund expectations (0 for admin actions)
+    pure val max_funds = 0
+    nondet message_liquidation_health: int = 1.to(MAX_AMOUNT).oneOf() // Health > 0
+    pure val message: ExecuteMsg = ExecuteMsg_SetLiquidationHealth({ liquidation_health: message_liquidation_health })
+    execute_message(message, max_funds)
+  }
+
+  pure def set_mintable_health(state: ContractState, info: MessageInfo, mintable_health: int): (Result[Response, ContractError], ContractState) = {
+    // TODO: Update body based on src/contract.rs:execute_set_mintable_health
+    (Ok(Response_new), state)
+  }
+                            
+  action set_mintable_health_action = {
+    // TODO: Change next line according to fund expectations (0 for admin actions)
+    pure val max_funds = 0
+    nondet message_mintable_health: int = 1.to(MAX_AMOUNT).oneOf() // Health > 0
+    pure val message: ExecuteMsg = ExecuteMsg_SetMintableHealth({ mintable_health: message_mintable_health })
+    execute_message(message, max_funds)
+  }
+
+  pure def set_cw20_dira_contract_address(state: ContractState, info: MessageInfo, cw20_dira_contract_address: Addr): (Result[Response, ContractError], ContractState) = {
+    // TODO: Update body based on src/contract.rs:execute_set_cw20_dira_contact_address
+    (Ok(Response_new), state)
+  }
+                            
+  action set_cw20_dira_contract_address_action = {
+    // TODO: Change next line according to fund expectations (0 for admin actions)
+    pure val max_funds = 0
+    nondet message_cw20_dira_contract_address: Addr = ADDRESSES.oneOf() // Could be any address initially
+    pure val message: ExecuteMsg = ExecuteMsg_SetCW20DiraContractAddress({ cw20_dira_contract_address: message_cw20_dira_contract_address })
+    execute_message(message, max_funds)
+  }
+
+  // --- State Definition ---
+
+  // Based on src/state.rs
+  type ContractState = {
+    collateral_token_denom: str,
+    admin_addresses: List[Addr],
+    liquidation_health: int,    // Decimal -> int
+    mintable_health: int,       // Decimal -> int
+    locked_collateral: Addr -> int, // Decimal -> int
+    minted_dira: Addr -> int,       // Decimal -> int
+    collateral_token_price: int, // Decimal -> int
+    cw20_dira_contract_address: Addr, // Assuming it gets set, might need Option[Addr]
+  }
+
+  // Initial state values
+  pure val init_contract_state: ContractState = {
+    collateral_token_denom: "", // Set during instantiate
+    admin_addresses: [],        // Set during instantiate
+    liquidation_health: 0,      // Set during instantiate
+    mintable_health: 0,         // Set during instantiate
+    locked_collateral: Map(),
+    minted_dira: Map(),
+    collateral_token_price: 0, // Needs to be set by admin
+    cw20_dira_contract_address: "", // Needs to be set by admin or instantiate
+  }
+
+  // --- Execution Steps ---
+
+  action execute_step = all {
+    any {
+      lock_collateral_action,
+      unlock_collateral_action,
+      mint_dira_action,
+      burn_dira_action,
+      liquidate_stablecoins_action,
+      set_collateral_price_in_dirham_action,
+      set_liquidation_health_action,
+      set_mintable_health_action,
+      set_cw20_dira_contract_address_action
+    },
+    advance_time,
+  }
+
+  // Default reply stub (Needed for boilerplate step action)
+  pure def reply(state: ContractState, _env: Env, _reply: Reply): (Result[Response, ContractError], ContractState) = {
+      (Ok(Response_new), state)
+  }
+
+  // --- Boilerplate Actions ---
+
+  pure val init_bank_state = ADDRESSES.mapBy(_ => DENOMS.mapBy(_ => MAX_AMOUNT))
+
+  val env_val = { block: { time: time, height: 1 } } // TODO: Add a height var if you need it
+
+  action init = {
+    // TODO: Fill in InstantiateMsg fields nondeterministically or with defaults
+    pure val max_funds = 0 // Instantiate usually takes no funds
+
+    nondet sender = Set("admin").oneOf() // Initial admin
+    nondet denom = DENOMS.oneOf()        // Not relevant for instantiate usually
+    nondet amount = 0.to(max_funds).oneOf()
+    val funds = [{ denom: denom, amount: amount }]
+    val info = { sender: sender, funds: funds }
+
+    // Choose reasonable initial values or make them nondeterministic
+    nondet init_liquidation_health: int = 110.to(150).oneOf()
+    nondet init_mintable_health: int = 130.to(200).oneOf() // Ensure > liquidation
+    nondet init_collateral_token_denom: str = Set("uatom").oneOf()
+    nondet init_cw20_addr_opt: Option[Addr] = Set(Some("cw20_addr_placeholder"), None).oneOf() // Placeholder
+
+    // Ensure mintable > liquidation if both are nondet
+    assume(init_mintable_health > init_liquidation_health)
+
+    pure val message: InstantiateMsg = {
+      liquidation_health: init_liquidation_health,
+      mintable_health: init_mintable_health,
+      collateral_token_denom: init_collateral_token_denom,
+      cw20_dira_contract_address: init_cw20_addr_opt,
+    }
+    // Use init_contract_state as the base, instantiate modifies it
+    pure val r = instantiate(init_contract_state, { block: { time: 0, height: 1 } }, info, message)
+
+    all {
+      contract_state' = r._2,
+      bank' = init_bank_state,
+      result' = r._1,
+      time' = 0,
+    }
+  }
+
+
+  action execute_message(message, max_funds) = {
+    nondet sender = ADDRESSES.oneOf()
+    nondet denom = DENOMS.oneOf()
+    nondet amount = 0.to(max_funds).oneOf()
+    val funds = [{ denom: denom, amount: amount }]
+    val info = { sender: sender, funds: funds }
+
+    val r = execute(contract_state, env_val, info, message)
+    all {
+      // Basic bank check, might need refinement based on action
+      bank.get(sender).get(denom) >= amount,
+      match r._1 {
+        // Basic bank update, needs refinement for unlocks/burns etc.
+        | Ok(resp) => {
+             // Simple model: assume funds go to contract on success unless it's an unlock/burn
+             // TODO: Refine based on actual message effects (BankMsg_Send etc in response)
+             bank' = bank.setBy(sender, balances => balances.setBy(denom, balance => balance - amount))
+                               .setBy(CONTRACT_ADDRESS, balances => balances.setBy(denom, balance => balance + amount))
+        }
+        | Err(_) => bank' = bank // No bank change on error
+      },
+      result' = r._1,
+      contract_state' = r._2,
+    }
+  }
+
+  action advance_time = time' = time + 1
+
+  action step = {
+    val message_getting = get_message(result)
+    val new_result = message_getting._1
+    val opt_message = message_getting._2
+    match opt_message {
+      | Some(submsg) => {
+          val current_state = { bank: bank, result: new_result, contract_state: contract_state }
+          // process_message needs the reply function defined for the contract
+          val new_state = process_message(current_state, env_val, CONTRACT_ADDRESS, submsg, reply)
+          all {
+            bank' = new_state.bank,
+            result' = new_state.result,
+            contract_state' = new_state.contract_state,
+            advance_time, // Assume time advances even when processing submessages
+          }
+      }
+      | None => execute_step // If no submessages, execute a top-level step
+    }
+  }
+
+} // End of module stable_dira
 ```
 
 Contents of quint/lib/bank.qnt:
