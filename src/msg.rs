@@ -1,3 +1,4 @@
+use cosmwasm_schema::QueryResponses;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use cosmwasm_std::{Addr, Decimal};
@@ -54,38 +55,48 @@ pub enum ExecuteMsg {
 /// These endpoints allow public access to the contract's state.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[derive(QueryResponses)]
 pub enum QueryMsg {
     /// Query the total collateral locked by a specific wallet address.
+    #[returns(CollateralResponse)]
     QueryLockedCollateral {
         wallet_address_to_query: Addr,
     },
 
     /// Query the total DIRA stablecoins minted by a specific wallet address.
+    #[returns(MintedDiraResponse)]
     QueryMintedDira {
         wallet_address_to_query: Addr,
     },
 
     /// Query the current health of a stablecoin minter.
+    #[returns[StablecoinHealthResponse]]
     QueryStablecoinHealth {
         stablecoin_minter_address_to_query: Addr,
     },
 
     /// Query the price of the collateral in dirham.
+    #[returns(CollateralPriceResponse)]
     QueryCollateralPrice {},
 
     /// Query the liquidation health threshold.
+    #[returns(LiquidationHealthResponse)]
     QueryLiquidationHealth {},
 
     /// Query the mintable health threshold.
+    #[returns(MintableHealthResponse)]
     QueryMintableHealth {},
 
     /// Query the list of admin addresses.
+    #[returns(AdminAddressesResponse)]
     QueryAdminAddresses {},
 
     /// Query the collateral token denom allowed.
+    #[returns(CollateralTokenDenomResponse)]
     QueryCollateralTokenDenom {},
 
     /// Query the CW20 DIRA token contract address.
+    #[returns(CW20DiraContractAddressResponse)]
     QueryCW20DiraContractAddress {},
 }
 
