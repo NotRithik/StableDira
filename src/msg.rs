@@ -2,6 +2,7 @@ use cosmwasm_schema::QueryResponses;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use cosmwasm_std::{Addr, Decimal};
+use crate::state::FeeTier;
 
 /// InstantiateMsg is used for initializing the contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -49,6 +50,8 @@ pub enum ExecuteMsg {
     SetCW20DiraContractAddress {
         cw20_dira_contract_address: Addr,
     },
+    EnableFeeSwitch {} ,
+    DisableFeeSwitch {},
 }
 
 /// QueryMsg contains all queryable contract endpoints.
@@ -98,6 +101,9 @@ pub enum QueryMsg {
     /// Query the CW20 DIRA token contract address.
     #[returns(CW20DiraContractAddressResponse)]
     QueryCW20DiraContractAddress {},
+
+    #[returns(FeeConfigResponse)]
+    QueryGetFeeConfig {} ,
 }
 
 /// Responses for each query
@@ -154,4 +160,11 @@ pub struct CollateralTokenDenomResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct CW20DiraContractAddressResponse {
     pub cw20_dira_contract_address: Option<Addr>,
+}
+
+/// Response for querying the Fee Switch state and Current implemented Tier
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct FeeConfigResponse {
+    pub fee_enabled: bool,
+    pub tier : FeeTier
 }
