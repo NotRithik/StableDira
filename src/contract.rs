@@ -491,6 +491,7 @@ fn execute_burn_dira(
         funds: vec![],
     };
 
+    // Treasury charges
     let admins = ADMIN_ADDRESSES.load(deps.storage)?;
     let treasury_address =
         admins.first()
