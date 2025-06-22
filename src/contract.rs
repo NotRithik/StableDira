@@ -117,7 +117,7 @@ pub fn execute(
 
         ExecuteMsg::SetCW20DiraContractAddress {
             cw20_dira_contract_address,
-        } => execute_set_cw20_dira_contact_address(deps, cw20_dira_contract_address),
+        } => execute_set_cw20_dira_contact_address(deps, cw20_dira_contract_address,info),
 
         ExecuteMsg::EnableFeeSwitch {}   => execute_enable_fee_switch_state(deps, info),
 
@@ -384,16 +384,16 @@ fn execute_mint_dira(
     let fee_config = FEE_SWITCH.load(deps.storage)?;
     let fee_amount = helper_calculate_fee_tier_amount(dira_to_mint, &fee_config)?;
 
+    let dira_to_mint_after_fee_deduction = dira_to_mint - fee_amount ;
 
 
     // Else, mint dira and transfer it to user, add that message to the response
     MINTED_DIRA.save(
         deps.storage,
         info.sender.clone(),
-        &(dira_to_mint + previously_minted_dira),
+        &(dira_to_mint_after_fee_deduction + previously_minted_dira),
     )?;
 
-    let dira_to_mint_after_fee_deduction = dira_to_mint - fee_amount ;
 
     // Get the CW20 contract address
     let cw20_dira_contract_address = match CW20_DIRA_CONTRACT_ADDRESS.may_load(deps.storage) {
@@ -463,6 +463,7 @@ fn execute_burn_dira(
 
     let fee_config = FEE_SWITCH.load(deps.storage)?;
     let fee_amount = helper_calculate_fee_tier_amount(dira_to_return, &fee_config)?;
+    let dira_to_burn_after_fee_deduction = dira_to_return - fee_amount ;
 
 
     MINTED_DIRA.save(
@@ -470,8 +471,6 @@ fn execute_burn_dira(
         info.sender.clone(),
         &(previously_minted_dira - dira_to_return),
     )?;
-
-    let dira_to_burn_after_fee_deduction = dira_to_return - fee_amount ;
 
     // Get the CW20 contract address
     let cw20_dira_contract_address = match CW20_DIRA_CONTRACT_ADDRESS.may_load(deps.storage) {
@@ -674,7 +673,9 @@ fn execute_set_mintable_health(
 fn execute_set_cw20_dira_contact_address(
     deps: DepsMut,
     cw20_dira_contract_address: Addr,
+    info:MessageInfo,
 ) -> Result<Response, ContractError> {
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
     if !admins.contains(&info.sender) {
         return Err(ContractError::UnauthorizedUser {});
     }

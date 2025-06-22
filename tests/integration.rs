@@ -612,7 +612,7 @@ fn test_query_functions() {
         .wrap()
         .query_wasm_smart(dira_contract.clone(), &query_minted)
         .unwrap();
-    assert_eq!(res.dira_minted, Decimal::from_ratio(5000u128, 100u128));
+    assert_eq!(res.dira_minted, Decimal::from_ratio(4985u128, 100u128));
     dbg!("User's minted DIRA:", res.dira_minted);
 
     // Query stablecoin health
