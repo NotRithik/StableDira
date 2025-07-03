@@ -43,7 +43,13 @@ pub enum ContractError {
     CW20DiraContractAddressNotSet {},
 
     #[error("{wallet_address}'s Dira are too healthy to liquidate")]
-    TooHealthyToLiquidate{ wallet_address: cosmwasm_std::Addr }
+    TooHealthyToLiquidate{ wallet_address: cosmwasm_std::Addr },
+
+    #[error("Fee Switch is currently Disabled")]
+    FeeSwitchDisabled  {} ,
+
+    #[error("No admin addresses are set in the contract.")]
+    NoAdminAddressesSet {},
 
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.

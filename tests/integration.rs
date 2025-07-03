@@ -267,11 +267,18 @@ fn test_mint_burn_dira() {
     let balance_query = cw20::Cw20QueryMsg::Balance {
         address: admin.to_string(),
     };
+
+    let amount = Decimal::from_atomics(1_000u128, 6).unwrap();
+    let fee = helper_calculate_fee_tier_amount(amount);
+    // This fee is now routed to the same admin currently , as this address is considered as treasury address
+    let after_fee = amount;
+    let expected_admin_mint = after_fee.atomics() / Uint128::from(u128::pow(10, 12));
+
     let balance: cw20::BalanceResponse = app
         .wrap()
         .query_wasm_smart(cw20_contract_addr.clone(), &balance_query)
         .unwrap();
-    assert_eq!(balance.balance, Uint128::new(1_000));
+    assert_eq!(balance.balance, expected_admin_mint);
     dbg!("Admin's balance of DIRA:", balance.balance);
 
     let increase_allowance_msg = Cw20ExecuteMsg::IncreaseAllowance {
@@ -289,7 +296,7 @@ fn test_mint_burn_dira() {
     assert!(res.is_ok());
     dbg!("Successfully granted allowance to Dira contract!");
 
-    // Burn DIRA from admin
+    // // Burn DIRA from admin
     let burn_dira_msg = DiraExecuteMsg::BurnDira {
         dira_to_burn: Decimal::from_atomics(500u128, 6).unwrap(),
     };
@@ -301,16 +308,22 @@ fn test_mint_burn_dira() {
     );
     assert!(res.is_ok());
     dbg!("Burnt 500 DIRA from admin");
-
-    // Query admin's balance of CW20 DIRA after burning
+    //
+    // // Query admin's balance of CW20 DIRA after burning
     let balance: cw20::BalanceResponse = app
         .wrap()
         .query_wasm_smart(cw20_contract_addr.clone(), &balance_query)
         .unwrap();
-    assert_eq!(balance.balance, Uint128::new(500));
+    let burn = Decimal::from_atomics(500u128, 6).unwrap() ;
+    // This fee is now routed to the same admin currently , as this address is considered as treasury address
+    let fee_amount = helper_calculate_fee_tier_amount(burn);
+    let fee_admin = (expected_admin_mint - ( burn.atomics() / Uint128::from(u128::pow(10, 12))) ) + fee_amount.atomics() / Uint128::from(u128::pow(10, 12));
+    assert_eq!(balance.balance, Uint128::from(fee_admin)+ Uint128::one());
     dbg!("Admin's balance of DIRA after burning:", balance.balance);
 
-    // Mint DIRA for non-admin
+
+    // Fees for minting and buring will be deducted from non admin users
+    // // Mint DIRA for non-admin
     let mint_dira_msg = DiraExecuteMsg::MintDira {
         dira_to_mint: Decimal::from_atomics(500u128, 6).unwrap(),
     };
@@ -322,16 +335,22 @@ fn test_mint_burn_dira() {
     );
     assert!(res.is_ok());
     dbg!("Minted DIRA for non-admin");
-
-    // Query non-admin's balance of CW20 DIRA
+    //
+    // // Query non-admin's balance of CW20 DIRA
     let non_admin_balance_query = cw20::Cw20QueryMsg::Balance {
         address: non_admin.to_string(),
     };
+
+    let amount = Decimal::from_atomics(500u128, 6).unwrap();
+    let fee = helper_calculate_fee_tier_amount(amount);
+    let after_fee = amount - fee;
+    let expected_non_admin_mint = after_fee.atomics() / Uint128::from(u128::pow(10, 12));
+
     let balance: cw20::BalanceResponse = app
         .wrap()
         .query_wasm_smart(cw20_contract_addr.clone(), &non_admin_balance_query)
         .unwrap();
-    assert_eq!(balance.balance, Uint128::new(500));
+    assert_eq!(balance.balance, expected_non_admin_mint);
     dbg!("Non-admin's balance of DIRA:", balance.balance);
 
     let increase_allowance_msg = Cw20ExecuteMsg::IncreaseAllowance {
@@ -349,7 +368,7 @@ fn test_mint_burn_dira() {
     assert!(res.is_ok());
     dbg!("Successfully granted allowance to Dira contract!");
 
-    // Burn DIRA from non-admin
+    // // Burn DIRA from non-admin
     let burn_dira_msg = DiraExecuteMsg::BurnDira {
         dira_to_burn: Decimal::from_atomics(250u128, 6).unwrap(),
     };
@@ -362,12 +381,16 @@ fn test_mint_burn_dira() {
     assert!(res.is_ok());
     dbg!("Burned 250 DIRA from non-admin");
 
-    // Query non-admin's balance of CW20 DIRA after burning
+    // // Query non-admin's balance of CW20 DIRA after burning
+    let burn = Decimal::from_atomics(250u128, 6).unwrap() ;
+    let fee_amount = helper_calculate_fee_tier_amount(burn);
+    let expected_balance_non_admin = (expected_non_admin_mint - ( burn.atomics() / Uint128::from(u128::pow(10, 12))) ) + fee_amount.atomics() / Uint128::from(u128::pow(10, 12));
+
     let balance: cw20::BalanceResponse = app
         .wrap()
         .query_wasm_smart(cw20_contract_addr.clone(), &non_admin_balance_query)
         .unwrap();
-    assert_eq!(balance.balance, Uint128::new(250));
+    assert_eq!(balance.balance, expected_balance_non_admin + Uint128::one());
     dbg!(
         "Non-admin's balance of DIRA after burning:",
         balance.balance
@@ -589,7 +612,7 @@ fn test_query_functions() {
         .wrap()
         .query_wasm_smart(dira_contract.clone(), &query_minted)
         .unwrap();
-    assert_eq!(res.dira_minted, Decimal::from_ratio(5000u128, 100u128));
+    assert_eq!(res.dira_minted, Decimal::from_ratio(4985u128, 100u128));
     dbg!("User's minted DIRA:", res.dira_minted);
 
     // Query stablecoin health
@@ -666,4 +689,21 @@ fn test_query_functions() {
         "CW20 DIRA contract address:",
         res.cw20_dira_contract_address
     );
+}
+
+fn helper_calculate_fee_tier_amount(amount: Decimal) -> Decimal {
+    if amount < Decimal::from_ratio(999u128, 1u128) {
+
+        amount * Decimal::permille(3)
+    } else if amount < Decimal::from_ratio(10_000u128, 1u128) {
+
+        amount * Decimal::permille(1_5)
+    } else {
+
+        amount * Decimal::permille(0_5)
+    }
+}
+
+fn to_cw20_amount(decimal: Decimal, decimals: u32) -> Uint128 {
+    decimal.atomics() / Uint128::from(10u128.pow(12 - decimals))
 }

@@ -12,17 +12,10 @@ use cw20::TokenInfoResponse;
 
 use crate::error::ContractError;
 
-use crate::msg::{
-    AdminAddressesResponse, CW20DiraContractAddressResponse, CollateralPriceResponse,
-    CollateralResponse, CollateralTokenDenomResponse, LiquidationHealthResponse,
-    MintableHealthResponse, MintedDiraResponse, StablecoinHealthResponse,
-};
+use crate::msg::{AdminAddressesResponse, CW20DiraContractAddressResponse, CollateralPriceResponse, CollateralResponse, CollateralTokenDenomResponse, LiquidationHealthResponse, MintableHealthResponse, MintedDiraResponse, StablecoinHealthResponse};
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use crate::state::{
-    ADMIN_ADDRESSES, COLLATERAL_TOKEN_DENOM, COLLATERAL_TOKEN_PRICE, CW20_DIRA_CONTRACT_ADDRESS,
-    LIQUIDATION_HEALTH, LOCKED_COLLATERAL, MINTABLE_HEALTH, MINTED_DIRA,
-};
+use crate::state::{ADMIN_ADDRESSES, COLLATERAL_TOKEN_DENOM, COLLATERAL_TOKEN_PRICE, CW20_DIRA_CONTRACT_ADDRESS, LIQUIDATION_HEALTH, LOCKED_COLLATERAL, MINTABLE_HEALTH, MINTED_DIRA, FeeTier, FEE_SWITCH, FeeConfig};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:cosmwasm-stable-dira";
@@ -62,6 +55,13 @@ pub fn instantiate(
     LIQUIDATION_HEALTH.save(deps.storage, &msg.liquidation_health)?;
     MINTABLE_HEALTH.save(deps.storage, &msg.mintable_health)?;
     COLLATERAL_TOKEN_DENOM.save(deps.storage, &msg.collateral_token_denom)?;
+
+    let default_fee_config = FeeConfig{
+        enabled: true,
+        tier: FeeTier::Low,
+    };
+
+    FEE_SWITCH.save(deps.storage, &default_fee_config)?;
 
     match msg.cw20_dira_contract_address {
         Some(contract_address) => {
@@ -117,7 +117,11 @@ pub fn execute(
 
         ExecuteMsg::SetCW20DiraContractAddress {
             cw20_dira_contract_address,
-        } => execute_set_cw20_dira_contact_address(deps, cw20_dira_contract_address),
+        } => execute_set_cw20_dira_contact_address(deps, cw20_dira_contract_address,info),
+
+        ExecuteMsg::EnableFeeSwitch {}   => execute_enable_fee_switch_state(deps, info),
+
+        ExecuteMsg::DisableFeeSwitch {} => execute_disable_fee_switch_state(deps, info),
     }
 }
 
@@ -139,6 +143,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::QueryAdminAddresses {} => query_admin_addresses(deps),
         QueryMsg::QueryCollateralTokenDenom {} => query_collateral_token_denom(deps),
         QueryMsg::QueryCW20DiraContractAddress {} => query_cw20_dira_contract_address(deps),
+        QueryMsg::QueryGetFeeConfig {} => query_fee_config_state(deps)
     }
 }
 
@@ -208,6 +213,20 @@ fn helper_is_cw20_contract(deps: Deps, contract_addr: &Addr) -> bool {
         Ok(_response) => true, // The contract supports CW20 TokenInfo query
         Err(_) => false,       // Not a CW20 contract
     }
+}
+
+// This function helps to calculate the tier amount that should go to treasury
+fn helper_calculate_fee_tier_amount(amount: Decimal, fee_config: &FeeConfig) -> Result<Decimal, ContractError> {
+    if !fee_config.enabled{
+        return Err(ContractError::FeeSwitchDisabled {})
+    }
+
+    let tier = FeeTier::from_amount(amount);
+    let rate  = tier.rate() ;
+    let fee = amount * rate ;
+
+    Ok(fee)
+
 }
 
 // Function to lock collateral
@@ -361,12 +380,20 @@ fn execute_mint_dira(
         return Err(ContractError::InsufficientCollateral {});
     }
 
+    //Implementation of fee switch mechanism
+    let fee_config = FEE_SWITCH.load(deps.storage)?;
+    let fee_amount = helper_calculate_fee_tier_amount(dira_to_mint, &fee_config)?;
+
+    let dira_to_mint_after_fee_deduction = dira_to_mint - fee_amount ;
+
+
     // Else, mint dira and transfer it to user, add that message to the response
     MINTED_DIRA.save(
         deps.storage,
         info.sender.clone(),
-        &(dira_to_mint + previously_minted_dira),
+        &(dira_to_mint_after_fee_deduction + previously_minted_dira),
     )?;
+
 
     // Get the CW20 contract address
     let cw20_dira_contract_address = match CW20_DIRA_CONTRACT_ADDRESS.may_load(deps.storage) {
@@ -374,10 +401,30 @@ fn execute_mint_dira(
         _ => return Err(ContractError::CW20DiraContractAddressNotSet {}),
     };
 
-    // Mint CW20 tokens
+
+    //Admin address that routes to treasury
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
+    let treasury_address =
+             admins.first()
+            .ok_or(ContractError::NoAdminAddressesSet {})?;
+
+
+    // Mint CW20 tokens , to treasury according to fee tiers
+    let mint_msg_for_treasury = cw20::Cw20ExecuteMsg::Mint {
+        recipient : treasury_address.to_string() ,
+        amount: fee_amount.atomics() / Uint128::from(u128::pow(10, 12)),
+    } ;
+
+    let mint_treasury_charges = cosmwasm_std::WasmMsg::Execute {
+        contract_addr: cw20_dira_contract_address.to_string(),
+        msg: to_json_binary(&mint_msg_for_treasury)?,
+        funds:vec![]
+    } ;
+
+    // Mint CW20 tokens to user
     let mint_msg = cw20::Cw20ExecuteMsg::Mint {
         recipient: info.sender.to_string(),
-        amount: dira_to_mint.atomics() / Uint128::from(u128::pow(10, 12)),
+        amount:dira_to_mint_after_fee_deduction.atomics() / Uint128::from(u128::pow(10, 12)),
     };
 
     let mint_cw20_message = cosmwasm_std::WasmMsg::Execute {
@@ -386,13 +433,16 @@ fn execute_mint_dira(
         funds: vec![],
     };
 
+
+
     Ok(Response::new()
         .add_message(mint_cw20_message)
+        .add_message(mint_treasury_charges)
         .add_attribute("action", "mint_dira")
         .add_attribute("sender", info.sender.to_string())
         .add_attribute(
             "total_dira_minted_by_sender",
-            (dira_to_mint + previously_minted_dira).to_string(),
+            (dira_to_mint_after_fee_deduction + previously_minted_dira).to_string(),
         ))
 }
 
@@ -411,6 +461,11 @@ fn execute_burn_dira(
         return Err(ContractError::ReturningMoreDiraThanMinted {});
     }
 
+    let fee_config = FEE_SWITCH.load(deps.storage)?;
+    let fee_amount = helper_calculate_fee_tier_amount(dira_to_return, &fee_config)?;
+    let dira_to_burn_after_fee_deduction = dira_to_return - fee_amount ;
+
+
     MINTED_DIRA.save(
         deps.storage,
         info.sender.clone(),
@@ -423,10 +478,10 @@ fn execute_burn_dira(
         _ => return Err(ContractError::CW20DiraContractAddressNotSet {}),
     };
 
-    // Burn CW20 tokens
+     // Burn CW20 tokens
     let burn_msg = cw20::Cw20ExecuteMsg::BurnFrom {
         owner: info.sender.to_string(),
-        amount: dira_to_return.atomics() / Uint128::from(u128::pow(10, 12)),
+        amount: dira_to_burn_after_fee_deduction.atomics() / Uint128::from(u128::pow(10, 12))
     };
 
     let burn_cw20_message = cosmwasm_std::WasmMsg::Execute {
@@ -435,8 +490,27 @@ fn execute_burn_dira(
         funds: vec![],
     };
 
+    // Treasury charges
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
+    let treasury_address =
+        admins.first()
+            .ok_or(ContractError::NoAdminAddressesSet {})?;
+
+    let transfer_fee_cw20 = cw20::Cw20ExecuteMsg::Transfer {
+        recipient: treasury_address.to_string(),
+        amount: fee_amount.atomics() / Uint128::from(u128::pow(10, 12)),
+    };
+
+
+    let transfer_fee_cw20_msg = cosmwasm_std::WasmMsg::Execute {
+        contract_addr: cw20_dira_contract_address.to_string(),
+        msg: to_json_binary(&transfer_fee_cw20)?,
+        funds: vec![],
+    };
+
     Ok(Response::new()
         .add_message(burn_cw20_message)
+        // .add_message(transfer_fee_cw20_msg)
         .add_attribute("action", "burn_dira")
         .add_attribute("sender", info.sender.to_string())
         .add_attribute(
@@ -599,7 +673,9 @@ fn execute_set_mintable_health(
 fn execute_set_cw20_dira_contact_address(
     deps: DepsMut,
     cw20_dira_contract_address: Addr,
+    info:MessageInfo,
 ) -> Result<Response, ContractError> {
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
     if !admins.contains(&info.sender) {
         return Err(ContractError::UnauthorizedUser {});
     }
@@ -612,6 +688,47 @@ fn execute_set_cw20_dira_contact_address(
     } else {
         return Err(ContractError::InvalidCW20ContractAddress {});
     }
+}
+
+fn execute_enable_fee_switch_state(
+    deps: DepsMut,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
+
+    if !admins.contains(&info.sender) {
+        return Err(ContractError::UnauthorizedUser {});
+    }
+
+    FEE_SWITCH.update(deps.storage, |mut config| -> Result<_, ContractError> {
+        config.enabled = true;
+        Ok(config)
+    })?;
+
+    Ok(Response::new()
+        .add_attribute("action", "enable_fee")
+        .add_attribute("fee_enabled", "true"))
+}
+
+
+fn execute_disable_fee_switch_state(
+    deps: DepsMut,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    let admins = ADMIN_ADDRESSES.load(deps.storage)?;
+
+    if !admins.contains(&info.sender) {
+        return Err(ContractError::UnauthorizedUser {});
+    }
+
+    FEE_SWITCH.update(deps.storage, |mut config| -> Result<_, ContractError> {
+        config.enabled = false;
+        Ok(config)
+    })?;
+
+    Ok(Response::new()
+        .add_attribute("action", "disable_fee")
+        .add_attribute("fee_enabled", "false"))
 }
 
 /// Query the price of the collateral in dirham
@@ -703,4 +820,10 @@ fn query_cw20_dira_contract_address(deps: Deps) -> StdResult<Binary> {
     to_json_binary(&CW20DiraContractAddressResponse {
         cw20_dira_contract_address,
     })
+}
+
+/// Query the Fee Switch Config state
+fn query_fee_config_state(deps: Deps) -> StdResult<Binary> {
+    let fee_config = FEE_SWITCH.load(deps.storage)?;
+    to_json_binary(&fee_config)
 }
