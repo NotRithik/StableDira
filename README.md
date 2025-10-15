@@ -109,8 +109,8 @@ The frontend currently implements the following core functionalities:
 
 Future frontend enhancements are planned, including features such as collateral auctions, oracle price feed visualization, and governance participation interfaces.
 
-Live Preview of the Dira Frontend: [Dira Frontend](https://dira-alpha.vercel.app/).
-Frontend Source Code Repository: [Dira Frontend Repository](https://github.com/NotRithik/dira-frontend)
+Live Frontend: [Dira Frontend](https://dira.foundation).
+Frontend Source Code Repository: [Dira Frontend Repository](https://github.com/NotRithik/DiraFrontendV2)
 
 ---
 
